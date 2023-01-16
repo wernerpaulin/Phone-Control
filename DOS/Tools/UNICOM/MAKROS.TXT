@@ -1,0 +1,108 @@
+                AUTOMATISCHE DATEIöBERTRAGUNG MIT UNICOM
+        #########################################################
+
+        Programmierung der Makros in Unicom
+        ===================================
+        Im folgenden wird gezeigt, wie man automatisch Mailbox-Anwahl
+        und Dateitransfer mit Hilfe von Makros realisieren kann. Die
+        aufgefÅhrten Makros gehen von DEUTSCHEN Unicom-MenÅs aus.
+        Au·er den normalen Tasten sind folgende Sonderfunktionen in
+        Makros programmierbar (nicht zu verwechseln mit Steuerdateien):
+
+        ' (Apostroph)   Wartet eine Sekunde.
+        Ctrl-R          Liest den nÑchsten Namen aus der Dateiliste
+                        (hier FILES.LST) und sendet ihn zur Mailbox.
+                        Bei der Eingabe erscheint ein senkrechter
+                        Doppelpfeil.
+        Ctrl-Home       FÅhrt den aktuellen Funktionstasten-Makro von
+                        vorn aus, solange die Dateiliste noch nicht
+                        bis zum Ende abgearbeitet wurde. Bei der
+                        Eingabe erscheint ein doppeltes "<"-Zeichen.
+
+        (Hinweis: Auf Ihrer Tastatur hei·t die Taste Ctrl eventuell
+        Strg, und die Home-Taste hei·t eventuell Pos1.)
+        Tasten-Namen/-Kombinationen, die als nur ein Zeichen erscheinen,
+        sind im folgenden Text innerhalb spitzer Klammern eingeschlossen.
+        Die Mailbox-Befehle gehen von der Shamrock-Mailbox EMAIL aus.
+
+        F1-Makro: Anwahl
+        ----------------
+        <ALT-V>         Unicom-V.24-MenÅ mit Datei senden/empfangen
+        s               WÑhlt aus dem MenÅ "Steuerdatei ausfÅhren"
+        <Home>          Home-Taste (lîscht Eingabefeld, erscheint als h)
+        DIAL.UC         Name der Steuerdatei (im akt. Verzeichnis)
+        <Enter>         Beendet Eingabe (erscheint als kleiner Punkt)
+        <ALT-2>         FÑhrt mit F2-Makro fort (Taste 2=Ziffernreihe)
+
+        F2-Makro: Download(s)
+        ---------------------
+        CD <Ctrl-R>     Mailbox-Befehl CD ... (Ctrl-R = Doppelpfeil)
+        <Enter>         Erscheint als kleiner Punkt
+        '               Apostroph = 1 Sekunde Pause
+        GET <Ctrl-R>    Mailbox-Download-Befehl (Ctrl-R = Doppelpfeil)
+                        (TIP:  PUT statt GET zum Senden = Upload)
+        <Enter>         Erscheint als kleiner Punkt
+        '               Apostroph = 1 Sekunde Pause
+        <ALT-V>         V.24-MenÅ
+        E               Empfange Xmodem-Datei (TIP: X statt E fÅr Senden)
+        <Ctrl-Home>     Makro von vorn bis Ende der Dateiliste
+        <ALT-3>         Dann weiter mit F3-Makro
+
+        F3-Makro: Verbindung+Programm beenden
+        -------------------------------------
+        '               Apostroph = 1 Sekunde Pause nach Download
+        QUIT            Mailbox-Anweisung fÅr Verbindungsende
+        <Enter>         Erscheint als kleiner Punkt
+        '''             Drei Sekunden Pause fÅr Mailbox-Meldung
+        <ALT-Q>         Quit-MenÅ in Unicom
+        <Enter>         Beendet Unicom (zurÅck zu DOS bzw. Batch-File)
+
+
+        Aufbau der Anwahl-Datei DIAL.UC
+        ===============================
+
+        ATD 08137 9106      Modembefehl: Anwahl der Mailboxnummer
+        >                   Unicom-Steuerbefehl: Warten auf Connect
+        ''''''''''          10 Apostrophe = 10 Sekunden Pause (vor
+                            Eingabe des ersten Mailboxbefehls nîtig)
+
+        Aufbau der Dateiliste FILES.LST
+        ===============================
+
+        UTIL,LOCK_COM,FILE1.BIN
+        UTIL,DIAL_LZH,FILE2.BIN
+        UTIL,KBL_LZH,FILE3.BIN
+
+        Jede Zeile in FILES.LST enthÑlt, durch Kommata getrennt:
+        1) das Mailbox-Verzeichnis, in dem sich die Datei befindet
+           (bei EMAIL liegen alle Verzeichnisse unterhalb von EM.EXE
+           und sind auch ohne vorheriges "CD .." direkt erreichbar);
+        2) der Name der Datei in der Mailbox (ohne Pfad+Extension);
+        3) der Name der Datei auf dem Anrufer-Rechner, ggf. mit Pfad.
+        Diese Datei mit der Download-Liste kann auch aus einer anderen
+        Applikation nach Bedarf erzeugt werden.
+
+        Start von Unicom
+        ================
+        FÅr einen vollautomatischen Download der in der Datei
+        FILES.LST aufgefÅhrten Dateien starten Sie Unicom aus
+        einer Batch-Datei so (z.B. START.BAT):
+
+        UC @FILES.LST /B /F1                Download(s) durchfÅhren
+        IF NOT ERRORLEVEL 1 GOTO QUIT       Ende, wenn erfolgreich
+        DEL *.BIN                           Fehler: Fragmente lîschen
+        :FERTIG                             (.BIN ist nur Beispiel!)
+
+        Dabei ist UC = Programmname von Unicom,
+        @FILES.LST   = verwendet die Download-Dateiliste FILES.LST,
+        /B           = Batch-Switch (Unicom-Programmende bei Fehlern
+                       ohne Notwendigkeit eines Tastatur-Dialogs).
+        /F1          = Automatisch mit F1-Tastenmakro beginnen.
+
+        IF NOT ERRORLEVEL 1... springt zu xxx, wenn wÑhrend der
+                       öbertragung kein Fehler auftrat. Andernfalls
+                       kann die Batch-Datei spÑter noch einmal
+                       aufgerufen werden.
+
+        ---------------------------------------------------------------
+                 Shamrock Software - http://www.shamrock.de

@@ -1,0 +1,366 @@
+$DEBUG RB(0) XREF EP TITLE(IBS-SW fr das POI) DATE(17. August 1997)
+;
+NAME POI_IBS
+;****************************************************************************;
+;   Copyright:  1997  WePa - Entwicklungsabteilung                           ;
+;****************************************************************************;
+;   Kennzeichnung:                                                           ;
+;       ID-Nr.       030209019677                                            ;
+;       System       Phone-Control                                           ;
+;       Sub-System   Phone-Control Operating Interface -POI                  ;
+;       Funktion     Inbetriebsetzungs-Software f?r das POI                  ;
+;       Filename     POI_IBS.src                                             ;
+;****************************************************************************;
+;   History                                                                  ;
+;   Version     Datum       Autor             Bemerkung                      ;
+;   01.00       17.08.97    Paulin Werner     Rumpfversion                   ;
+;****************************************************************************;
+; Beschreibung :                                                             ;
+;               Nach zweimaligen L"uten hebt das POI ab und schickt dabei    ;
+;               ?ber die serielle Schnittstelle die ASCII-Zeichen "PICK UP"  ;
+;               Die sbertragung erfolgt mit 2400 Baud in Betriebsmodus 1     ;
+;               d.h.: 1 Startbit | 8 Datenbits | 1 Stopbit                   ;
+;               Druch das Starten von POIMON.bat erh"lt man einen richtig    ;
+;               konfigurierten Monitor.                                      ;   
+;               Zur IBS der Relais schickt man die DTMF-kodierten Zahlen 1-4.;
+;               Sie ist erfolgreich, wenn die vier gelben LED's in der       ;
+;               richtigen Reihenfolge aufleuchten.                           ;   
+;               dazu ert"nt beim Einschalten ein hoher Ton (3KHz) und beim   ;
+;               Auschalten ein tiefer Ton (ca. 500Hz)                        ;
+;               Bei andauernden DTMF-Ton blinkt die entsprechende LED.       ;
+;****************************************************************************;
+;
+;SEGMENT - NAMEN:
+;
+?STACK                  SEGMENT IDATA
+INTSERV                 SEGMENT CODE
+HAUPTPRG                SEGMENT CODE
+FLAGS                   SEGMENT BIT
+;
+                RSEG    ?STACK                  ;Stackreservierung
+                DS      20
+;
+                CSEG    AT      RESET   
+                LJMP    INIT
+;
+                CSEG    AT      TIMER0           ;Interrupt-Einsprungadr.
+                LJMP    INTSERV1
+;
+                CSEG    AT      TIMER1           ;Interrupt-Einsprungadr.
+                LJMP    INTSERV1
+;                
+                CSEG    AT      EXTI0            ;Interrupt-Einsprungadr.
+                LJMP    INTSERV1
+;
+                RSEG    FLAGS
+                DBIT    8
+;
+;Symboldefinitionen:
+;
+FLAG1           BIT     0
+FLAG2           BIT     1
+FLAG3           BIT     2
+FLAG4           BIT     3
+FLAG5           BIT     4
+FLAG6           BIT     5
+FLAG7           BIT     6
+FLAG8           BIT     7
+;
+;Port-Pin-Vergabe:
+;                 P1.7: Eingang f?r L"utsignal
+;                 P1.6: Ausgang zum Abheben
+;                 P1.5: Triggerung MFAUS
+;                 P1.4: Triggerung MFEIN
+;                 P1.3: Aktivierung durch Taste "4"
+;                 P1.2: Aktivierung durch Taste "3"
+;                 P1.1: Aktivierung durch Taste "2"
+;                 P1.0: Aktivierung durch Taste "1"
+;
+;Ext. Interrupt-Vergabe:
+;                       INT0: DTMF-codierte Taste liegt an Ausgangspins an
+;
+;Register-Verwendung:
+;                    R1: 12.5s, f?r Warten auf Reaktion nach abheben
+;                    R2: 6s, um ein Abheben einer anderen Anlage zu erkennen
+;                    R3: speichert die decodierte Tastennummer
+;                    R4: 400ms, f?r "Software-Tastenentprellung"
+;                    R5: 10s, f?r Warten auf erneuten Tastendruck
+;
+;FLAG-Vergabe:
+;             FLAG1: Interruptroutinen-Verzweigung
+;             FLAG2: DTMF-Ton-Verarbeitung aktiviert
+;             FLAG3: EIN-Bit, damit PC EIN/AUS unterscheiden kann
+;             FLAG4: AUS-Bit, damit PC EIN/AUS unterscheiden kann
+;
+;PROGRAMME:
+;
+                RSEG HAUPTPRG                           ;Hauptprogramm
+;
+INIT:           mov     SP, #?Stack-1
+START:          mov     a, P1
+                orl     a, #11000000b
+                mov     P1, a
+                mov     r0,#2                           ;7 mal l"uten
+                clr     tr0                             ;Timer 0 stoppen
+                clr     tr1                             ;Timer 1 stoppen
+                clr     FLAG1                           ;Unterscheidung: Intserv
+                clr     FLAG2                           ;DTMF-Ton aufgenommen
+                clr     FLAG3                           ;EIN-Bit
+                clr     FLAG4                           ;AUS-Bit
+                clr     FLAG5
+                clr     FLAG6
+                clr     FLAG7
+                clr     FLAG8
+
+;******************** Test der seriellen Schnitstelle ************************
+                mov     87H, #0
+                clr     ri
+                clr     tr1
+                clr     tf1
+                anl     tmod, #00001111b
+                orl     tmod, #00100000b
+                anl     tcon, #11001111b
+                orl     tcon, #00000101b
+                mov     th1, #(0F4H)
+                mov     tl1, #(0F4H)
+                setb    tr1
+                setb    REN
+                clr     SM0
+                setb    SM1
+                clr     ex0
+                mov     sbuf, #'P'                       
+                jnb     ti,$                                                                       
+                clr     ti
+
+
+ABFRAGE1:       jnb     p1.7, BEGINN                    ;warten auf L"utsignal
+                jmp     ABFRAGE1
+BEGINN:         mov     r2,#120                         ;6s Abfrage  
+                clr     ea
+                clr     tr0                             
+                anl     tmod, #11110000b                ;Timer 0, Mode 1  
+                orl     tmod, #00000001b                 
+                anl     tcon, #11001100b
+                orl     tcon, #0
+                mov     tl0, #low(-65000)               ;mit 65ms laden
+                mov     th0, #high(-65000)
+                setb    ea
+                setb    et0                             ;Timer0 - Int. freigeben
+                setb    tr0                             ;Timer0 starten
+SCHLEIFE:       clr     ea
+                clr     tr1
+                clr     tf1
+                anl     tmod, #00001111b                ;Timer 1, Mode 1
+                orl     tmod, #00010000b
+                anl     tcon, #00110011b
+                orl     tcon, #0
+                mov     tl1, #low(-50000)               ;mit 50ms laden
+                mov     th1, #high(-50000)
+                setb    ea
+                clr     et1                             ;T1-Int. sperren
+                setb    et0
+                setb    tr1                             ;Timer 1 starten
+ABFRAGE2:       jnb     p1.7, BEGINN                    ;Schleife um ein fremdes
+                jnb     p1.6, WEITER                    ;Abheben zu erkennen
+                jnb     tf1, ABFRAGE2                   ;innerhalb von 6 Sek. 
+                djnz    r2, SCHLEIFE                    ;mu  es erneuet L"uten
+                jmp     START                           ;sonst Neustart d. Prgm.
+;
+WEITER:         setb    FLAG1                           ;Kontrolle 12.5s lang:
+                clr     tr1                             ;erfolgt keine Reaktion,
+                mov     r1, #250                        ;wird wieder aufgelegt
+SCHLEIFE2:      clr     ea                              
+                clr     tr0                             
+                clr     tf0
+                mov     tl0, #low(-50000)
+                mov     th0, #high(-50000)
+                setb    ea
+                clr     et1                             ;sperrt T1-Interrupt
+                clr     et0                             ;sperrt T0-Interrupt
+                setb    it0                             ;INT0 -> auf Flanke
+                setb    ex0                             ;INT0 freigeben
+                setb    tr0                             ;T0 starten
+ABFRAGE3:       setb    IT0
+                jb      FLAG2, DTMFSERI
+                jnb     tf0, ABFRAGE3                   ;die Reaktion erfolgt
+                jb      FLAG2, DTMFSERI
+                djnz    r1, SCHLEIFE2                   ;durch INT0-Ausl"sung
+                jb      FLAG2, DTMFSERI
+                setb    p1.6                            ;aufgelegen, wenn r1=0
+                jmp     START
+;
+DTMFSERI:       setb    IT0
+                clr     FLAG2
+                clr     ea
+                clr     tr0
+                clr     tr1
+                jb      FLAG3, MFEIN
+                jb      FLAG4, MFAUS
+                jmp     SERIPC                          ;Tasten nur f?r PC best.
+MFEIN:          clr     P1.4                            ;Monoflop-EIN-Triggerung
+                jmp     MFZEIT
+MFAUS:          clr     P1.5                            ;Monoflop-AUS-Triggerung
+MFZEIT:         clr     tr1
+                clr     tf1
+                anl     tmod, #00001111b                ;Timer 1, Mode 1
+                orl     tmod, #00010000b
+                anl     tcon, #00110011b
+                orl     tcon, #0
+                mov     tl1, #low(-50000)               ;mit 50ms laden
+                mov     th1, #high(-50000)
+                setb    tr1                             ;Timer 1 starten
+MFZEITAB:       jnb     tf1, MFZEITAB
+                clr     tr1
+                setb    P1.4
+                setb    P1.5
+;
+;
+SERIPC:         clr     ea                              ;serielle sbertragung
+                mov     87H, #0                         ;FLAGS 3,4 f. Info an PC
+                clr     ti
+                anl     tmod, #00001111b
+                orl     tmod, #00100000b
+                anl     tcon, #11001100b
+                orl     tcon, #0
+                mov     th1, #(0F4H)
+                mov     tl1, #(0F4H)
+                setb    tr1
+                mov     a, r3
+                mov     sbuf, a                         
+                jnb     ti, $
+                clr     ti
+                clr     ea                               
+                clr     tr0
+                clr     tf0
+                anl     tmod, #11110000b                ;Timer 0, Mode 1  
+                orl     tmod, #00000001b                 
+                anl     tcon, #11001100b
+                orl     tcon, #0
+                mov     tl0, #low(-65000)               ;mit 65ms laden
+                mov     th0, #high(-65000)
+                setb    tr0                             ;Timer0 starten
+                jnb     tf0,$
+                jb      FLAG3, SERI_EIN
+                jb      FLAG4, SERI_AUS
+SERI_EIN:       mov     sbuf, #'E'
+                jnb     ti, $
+                jmp     SERIENDE
+SERI_AUS:       mov     sbuf, #'A'
+                jnb     ti, $
+SERIENDE:       clr     FLAG3
+                clr     FLAG4
+                mov     r5, #200
+                clr     tr1
+TASTE:          clr     ea
+                clr     tr1
+                clr     tf1
+                anl     tmod, #00001111b                ;Timer 1, Mode 1
+                orl     tmod, #00010000b
+                anl     tcon, #00110011b
+                orl     tcon, #0
+                mov     tl1, #low(-50000)               ;mit 50ms laden
+                mov     th1, #high(-50000)
+                setb    ea
+                clr     et1                             ;T1-Int. sperren
+                setb    ex0
+                setb    tr1                             ;Timer 1 starten
+TASTEABF:       jb      FLAG2, ZUDTMF                 
+                jnb     tf1, TASTEABF                   ;warten auf erneuten
+                djnz    r5, TASTE                       ;Tastendruck
+                jmp     START                           ;sonst Neustart d. Prgm.
+ZUDTMF:         jmp     DTMFSERI
+;
+                RSEG    INTSERV                         ;Interruptserviceroutine
+;
+INTSERV1:       clr     ea                              ;sperrt alle Interrupts
+                jb      FLAG1, INTSERV2                 ;Routinenverzweigung
+                clr     tr0
+                djnz    r0, NACHENDE                        ;1x l"uten abgeschlossen
+                clr     p1.6                            ;hebt ab
+;******************** Test der seriellen Schnitstelle ************************
+                mov     87H, #0
+                clr     ri
+                clr     tr1
+                clr     tf1
+                anl     tmod, #00001111b
+                orl     tmod, #00100000b
+                anl     tcon, #11001111b
+                orl     tcon, #00000101b
+                mov     th1, #(0F4H)
+                mov     tl1, #(0F4H)
+                setb    tr1
+                setb    REN
+                clr     SM0
+                setb    SM1
+                clr     ex0
+                mov     sbuf, #'P'                       
+                jnb     ti,$                                                                       
+                clr     ti
+                mov     sbuf, #'I'                       
+                jnb     ti,$                                                                       
+                clr     ti
+                mov     sbuf, #'C'                       
+                jnb     ti,$                                                                       
+                clr     ti
+                mov     sbuf, #'K'                       
+                jnb     ti,$                                                                       
+                clr     ti
+                mov     sbuf, #' '                       
+                jnb     ti,$                                                                       
+                clr     ti
+                mov     sbuf, #'U'                       
+                jnb     ti,$                                                                       
+                clr     ti
+                mov     sbuf, #'P'                       
+                jnb     ti,$                                                                       
+                clr     ti
+NACHENDE:       jmp     ENDE
+INTSERV2:       clr     ea
+                clr     tr0
+                clr     tr1
+                mov     dptr, #0fc00h                   ;/CS1 gew"hlt
+                movx    a, @dptr                        ;Daten in den Akku laden
+                anl     a, #00001111b
+                mov     r3, a
+                setb    FLAG2
+                cjne    a, #1, ZWEI                     ;Decodierung der Tasten
+                cpl     P1.0                            ;Taste "1" kompl. P1.0
+                jnb     P1.0, EIN
+                setb    FLAG4
+                jmp     ENDEDTMF
+ZWEI:           cjne    a, #2, DREI
+                cpl     P1.1                            ;Taste "2" kompl. P1.1
+                jnb     P1.1, EIN
+                setb    FLAG4
+                jmp     ENDEDTMF
+DREI:           cjne    a, #3, VIER
+                cpl     P1.2                            ;Taste "3" kompl. P1.2
+                jnb     P1.2, EIN
+                setb    FLAG4
+                jmp     ENDEDTMF
+VIER:           cjne    a, #4, SICHERAB
+                cpl     P1.3                            ;Taste "4" kompl. P1.3
+                jnb     P1.3, EIN
+                setb    FLAG4
+                jmp     ENDEDTMF
+SICHERAB:       cjne    a, #00001011b, ENDEDTMF         ;* - TASTE
+                orl     P1, #00111111b                  ;Sicherheitsabschaltung
+                setb    FLAG4
+                jmp     ENDEDTMF
+EIN:            setb    FLAG3
+ENDEDTMF:       mov     r4, #8                          ;"Software-Entprellung"
+ENTPREL1:       clr     tr1
+                clr     tf1
+                anl     tmod, #00001111b                ;Timer 1, Mode 1
+                orl     tmod, #00010000b
+                anl     tcon, #00110011b
+                orl     tcon, #0
+                mov     tl1, #low(-50000)               ;mit 50ms laden
+                mov     th1, #high(-50000)
+                setb    tr1                             ;Timer 1 starten
+ENTPREL2:       jnb     tf1, ENTPREL2                    
+                djnz    r4, ENTPREL1                    
+                clr     tr1
+ENDE:           setb    ea
+                reti
+                END

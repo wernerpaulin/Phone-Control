@@ -1,0 +1,1243 @@
+1.0 INTRODUCTION
+
+This manual describes a bare-bones method of developing 80C51 system
+code without an emulator.  RISM51X is installed in the target system
+and connected to a host PC system through a serial port.  The host PC
+runs the debugger ECM51.EXE.  Once the system has been debugged, RISM
+can be removed and the target can be run in stand-alone mode.
+
+RISM51.A51 is the source code for a Reduced Instruction Set Monitor
+which resides in the 80C51 target system memory.  RISM51.A51 contains
+many conditional assembly items.  RISM51X.A51 is a Reduced Instruction
+Set Monitor without conditional assembly items.  The following
+conditions were assumed for RISM51X.HEX:
+
+RISM51X.HEX is programmed into internal (87C51) or external EPROM (27C64)
+starting at location 0000H.
+
+External program RAM starts at location 2000H (8k bytes of static RAM).
+RD# and PSEN# are gated together through a 74AC08 and the output of
+that AND gate goes to OE# on the RAM and the EPROM.  This enables the
+memories to be read as either data memory or program memory. WR# goes
+directly to the WR# input of the RAM and does not go to the EPROM.
+
+The internal UART is used for communications with the host computer and
+cannot be used for anything else.
+
+Timer 1 is used to generate the UART baud rate and cannot be used for
+anything else.
+
+INT0 (P3.0) is used for the step-function interrupt. If INT0 is used
+for anything else, the external input to INT0 must be open-collector.
+
+P3.5 is used as a running indicator and cannot be used for anything
+else.
+
+The target system is assumed to be running on a 14.746 MHz crystal.  It
+should also work with a 16 MHz crystal with an 8.5% error in SIO bit
+width.  If you want to run at 11.059 MHz (or 12 MHz with an 8.5% error)
+replace the FCh value in location 0355h with a value of FDh during
+EPROM programming.  If you want to run at 7.37 MHz (or 8 MHz with an
+8.5% error) replace the FCh value in location 0355h with a value of
+FEh.  This must be done before programming RISM51X into an EPROM.
+Again, if you are using a 14.746 MHz (or 16 MHz) crystal, you do not
+need to change RISM51X.
+
+1.1  Serial Port Wiring
+
+The serial port on the host PC is used for the interface to the target
+system.  A DB-9 connector is wired to correspond to the Serial51.PCX
+file in this directory. Be sure to decouple all chips with at least
+a 0.1 uf capacitor.
+
+2.1 INTRODUCTION TO iRISM-iECM SOFTWARE
+
+2.1.1 Features
+
+Host system is an IBM PC AT, PC XT, or BIOS-compatible clone. 
+(Interfaces via COM1 or COM2 at 9600 baud.)
+
+Sixteen software execution breakpoints
+
+Concurrent interrogation of application memory and registers
+
+Supports BIT, BYTE, CHARACTER, WORD, STRING, DOUBLE-WORD and
+REAL variable types.
+
+Single-line Assembler/Disassembler
+
+Supports LOAD, SAVE, LIST, LOG, and command INCLUDE files,
+
+2.1.2 Restrictions
+
+An asychronous serial port capable of operation at 9600 baud must be
+available in the target system.  The system described in this document
+uses the serial port built into the 80C51 itself.
+
+All the interrupt and the reset vectors are available to the user at
+their normal defined address with the exception of the Serial Port
+Interrupt.
+
+This version of iECM-51 uses Timer 1 as the Baud Rate Generator.  Timer 1
+is loaded with a divison factor of 52 (OFFCCH) for a fixed baud rate of
+9600 with a crystal value of 16 MHz or 14.74 MHz.
+
+Locations 2EH through 3EH are reserved for use of the iECM monitor code.
+Make sure that user software does nothing to modify the contents of these
+memory locations.  Additionally, up to nine bytes of stack space may be
+consumed by running monitor code.  Be sure sufficient stack space exists
+in your application code.
+
+The iECM monitor uses Register Bank 3 as its transient scratch area.  All
+values modified here are restored when user code is executing.
+
+2.2 OVERVIEW
+
+2.2.1 Embedded Controller Monitor (ECM)
+
+An ECM (Embedded Controller Monitor) is a monitor providing basic debug
+capability which is intended to be installed and used in the user's
+system.  Typical capablities include loading object files into system
+RAM, examining and modifying variables, executing, and stepping
+through code.  In the past, most of these monitors have been configured
+to run with a standard "dumb" CRT with some form of auxiilary port
+for loading and saving object code from a host system.  It is now
+common for a personal computer to act as the host for program
+translation and also emulate a dumb CRT during user interaction with
+the ECM.  The ECM developed for the MCS-51 family makes the assumption
+that the user interface will always be provided by a personal computer.
+No provision is made for interface to a dumb CRT.  By making this
+assumption it is possible to reduce the size and complexity of the code
+that must be installed in the target system in order to take advantage
+of the ECM.  A term has been coined for this code resident in the target
+-- RISM.  The term RISM stands for Reduced Instruction Set Monitor and
+is an obvious take-off of the term RISC (Reduced Instruction Set
+Computer) used to describe a class of computer architectures.  The RISM
+consists of about 3k bytes of 8051 code which provide primitive
+operations such as read memory, write memory, start execution, and stop
+execution.  Software running in the host uses the RISM commands to
+provide a complete user interface to the target system.  The advantage
+of this approach is that the ECM can be readily adapted to different
+target systems and requires only a small part of the available target
+memory space.  The disadvantage is that the user interface must be
+provided by a personal computer.
+
+2.3 USER INTERFACE
+
+The user interface to the iECM-51 supports commands to initiate and
+configure the iECM-51, perform I/O operations involving DOS files,
+execute user programs, and interrogate variables in the target system.
+Interrogation can be done in a number of formats and in many cases can
+be done concurrently with user execution.
+
+2.3.1 Background Information
+
+2.3.1.1  Numeric Input
+
+The command parser used by the RISM software requires that numeric
+inputs always start with the digits 0-9.  If hexadecimal numbers are
+entered which start with A-F they should be preceded by a "0".  For
+example, enter "0AA55" instead of "AA55,,.
+
+2.3.1.2 Controlling Lengthy Commands
+
+Most of the commands supported by iECM-51 complete in "real" time in
+human terms, Some commands (e.g.  displaying or filling a large area of
+memory) take an appreciable length of time to complete.  In general
+these commands can be aborted by entering a CARRIAGE-RETURN.  Those
+which display a large amount of information can be made to pause by
+hitting the SPACE bar.  After the user has checked the data currently
+on the screen the SPACE bar can be depressed to resume the output.
+
+2.3-i.3 Aborting from iECM-51
+
+Entering a control-C will cause the iECM-51 to close any open files and
+return to DOS.
+
+2.3.2 lnititiating and Terminating iECM-51
+
+This section describes the commands for invoking iECM-51 from
+DOS and exiting back to DOS.
+
+2.3.2.1  iECM51 <-options>
+
+This command, entered at the DOS prompt, loads the iECM-51 software and
+starts it executing.  Several options are available with this command.
+Option strings always start with a hyphen ("-") and can be entered in
+upper or lower case.  The operation of these options is described
+below.  Any or all of these options can be entered in any order. If the
+options are contradictory, then the actual option accepted is the last
+one entered.
+
+2,3,2.2  -COM2, -COM1
+
+These options tell the iECM-51 software which serial communication port
+is to be used.  If neither of these options is entered then COM1 will
+be used as a default.  If iECM-51 detects valid CTS (Clear To Send) and
+DSR (Data Set Ready) signals from the appropriate COM port it will sign
+on and display a command prompt.  If the target is stopped, the command
+prompt will be an asterisk.  If the target is already running the prompt
+will be a greater-than sign.
+
+2.3.2.3  -DIAG
+
+If CTS or DSR are not present, iECM-51 will complain about it and ask
+if you want to proceed or exit.  It is possible, but not likely, that
+iECM-51 will operate properly even after complaining. It is more likely
+that there is a problem with the serial port or the cabling which will
+prevent proper operation.  If the problem is not obvious (e.g.
+disconnected cable or no power to the target hardware), then the -DIAG
+invocation option can be used to help isolate the problem.  The -DIAG
+option puts the iECM-51 system in a special mode which allows a serial
+loop-back test of the system.
+
+The target hardware will have to be reset before using the -DIAG
+command option.
+
+2.3.2.4  -POLL, -SIGNAL
+
+These two options control how the host software detects whether or not
+user code is running.  If poll mode is selected then the host will
+periodically poll the target with a REPORT-STATUS command.  This takes
+no additional hardware but forces the target to waste instruction
+cycles responding to the poll.  The signaling mode avoids this overhead
+but requires that the target set the Ring Indicator modem control line
+whenever it is running user code.  The user interface will then check
+this line before it issues a REPORT-STATUS command.  The default mode
+is signal.
+
+2.3.2.5  RESET SYSTEM
+         RES SYSTEM
+         RESET
+         RES
+ 
+These commands will reset the entire iECM-51 hardware system, including
+the target.  It operates by bringing the DTR line of the serial port
+low.  This, with appropriate circuitry in the target system, resets
+the target processor.  During this process the iECM-51 software will
+have to wait about one second to allow the target board to complete its
+initialization routines.  The iECM-51 will warn of this time delay and
+then ignore the user until it expires.  Any user code in the ROMSIM
+will have to be reloaded after this command is executed.
+
+2.3.2.6  DOS
+
+This command enables you to temporarily leave iECM-51 and return to
+DOS.  Once you have suspended iECM, you may perform other functions
+that you execute in DOS, including using other software programs, such
+as ASM51, as long as there is sufficient memory.
+
+To reenter iECM, type exit at the DOS prompt.  iECM will return with
+all conditions in effect at the time it was suspended.
+
+2.3.2.7  QUIT
+
+This command will close any files that iECM-51 has opened and exit to
+DOS.  Note that this command can be used even if the target is running.
+iECM-51 sets the selected COM port to 9600 baud, 8 bits, no parity, and
+one STOP bit.  The port will be left in this state by iECM-51 when
+control is returned to DOS.
+
+2.3.3 Default Base Commands
+
+These commands are used to set the default base for numeric input and
+output.  The valid bases are: 16 (hexadecimal), 10 (decimal), and 8
+(octal).  The default base is used to display variables.  It is not
+used to display addresses (which are displayed in hexadecimal) or
+breakpoint numbers (which are displayed in decimal).  The default base
+is also used to enter numbers into the command parser, but it is
+possible to override the default base during input by adding a
+character at the end of the number which forces the appropriate base
+to be used.  The overide characters are H (or h) for hexadecimal, T (or
+t) for decimal, and O (or o) for octal.  The overide character must
+appear immediately following the last digit of the number with no
+intervening space.
+
+BASE
+
+This command will display the current default base.
+
+BASE=<validbase>
+
+This command will set the current default base to <valid-base>.  When
+entering this command it is advisable to use an overide character to
+select the new default base:
+
+ BASE=100  ; selects octal
+ BASE=10T  ; selects decimal
+ BASE=10H  ; selects hexadecimal
+
+This avoids confusion when changing bases.  As an example of the
+confusion which is avoided, consider the following commands entered
+while the base is hexadecimal.  The command:
+
+BASE=10
+
+will leave the default base as hexadecimal and the command:
+
+BASE=16
+
+will result in an error because 16H (22T) is not a valid base.  The
+command:
+
+BASE=OA
+
+will select decimal as the default base but it is cleaner to use the
+overide character:
+
+BASE=10T
+
+This works independently of the current default base and leaves a
+useful record in log or list files which may be open.
+3.1 FILE OPERATIONS
+
+iECM-51 uses files in the host system to load and save object code,
+enter predefined strings of commands, to keep a log of commands that
+are entered by the user, and to keep a record of an entire debug
+session which includes both the characters entered by the user and the
+response generated by iECM-51 on the host screen.  The commands which
+operate with files are described in the following sections.
+
+3.1.1 Loading and Saving Object Code
+
+iECM-51 accepts object files which are generated by ASM-51, PLM-51, or
+RL-51.  It will not accept files which contain unresolved externals or
+files which contain relocatable records.  These files must be passed
+through RL-51 in order to resolve the externals and/or absolutely
+locate the relocatable segments.
+
+iECM-51 will not accept files in Intel HEX format.  Located on the disk
+supplied with iECM-51 is a utility called HEXOBJ.EXE for converting
+.HEX files to .OBJ for loading. At the DOS prompt, type:
+
+HEXOBJ <filename>.HEX <filename>.OBJ<CR>
+
+to convert filename.HEX to a loadable Intel OMF (Object Module Format).
+HEXOBJ will not convert any symbolic information contained in the .HEX
+file.
+
+The commands which operate on object files are:
+
+LOAD <filename>
+SAVE <addr> TO <addr> IN <filename>
+
+The metasymbol <filename> means that a valid MS-DOS file name must be entered
+in that position of the command string.
+
+LOAD <filename>
+
+This command loads the content records of the object file <filename>
+into target memory.
+
+SAVE <addr> TO <addr> IN <filename>
+
+This command saves a region of memory as an object file which can be
+reloaded at a later time.
+
+3.1.2 Other File Operations
+
+In addition to object files, the iECM-51 makes use of include files,
+log files, and list files.  Include files are files which contain
+commands which are to be executed by iECM-51.  They are expected to
+contain the exact sequence of ASCII characters that the user would
+enter from the keyboard to execute the command.  Include files can be
+tedious to generate with a text editor so iECM-51 can generate log
+files which store characters entered by the user.  The intent is that
+log files be used later as include files to recreate command sequences.
+List files keep a running record of both commands entered by the user
+and of the response generated by iECM-51.  Comments can be included in
+list and log files to make them easier to understand.  A comment starts
+with a semicolon (';') and ends with a carriage return or ESC.  The
+semicolon is considered to be part of the comment but not the CR or
+ESC.  The command parser will ignore comments but will put them in the
+list and log files.  The list and log files commands allow for default
+filenames and allow either overwriting existing data in the file or
+appending data at the end of the file.  This allows the user to gather
+list and log data in the default files which avoids the creation and
+management of a large number of separate files.  Log and list files are
+stamped with the date and time whenever they are opened to make it
+easier to use this capability and then go back and sort out the data
+from several debug sessions with a text editor.
+
+The commands involved in include, log, and list operations are:
+
+ INCLUDE <filename>
+ PAUSE
+
+ LIST
+ LIST <filename>
+
+ LOG
+ LOG <filename>
+
+ LISTOFF
+ LISTON
+
+ LOGOFF
+ LOGON
+
+Three of these commands require the user to supply a valid file name,
+the rest of these commands use the appropriate file name that has
+already been entered.
+
+INCLUDE <filename> 
+
+This command will attempt to open <filename> as a read only file.  If
+the file can be opened then the command parser will take commands from
+that file until the end of the file is reached.  The include file will
+then be closed.  Only one include file will be opened at a time.
+
+PAUSE
+
+This command is documented in this section because it is intended to be
+used as part of INCLUDE files.  It is not really a file oriented
+command itself.  When this command is entered the iECM-51 will stop
+parsing commands until a SPACE character is entered from the keyboard
+(it can't come from an INCLUDE file).  This provides a method of
+pausing in the middle of an INCLUDE file operation until the user has a
+chance to see what is going on and acknowledge the pause condition by
+depressing the SPACE bar.
+
+LIST
+
+This command behaves like the LIST <filename> command described below
+except that it uses the last <filename> that was entered as part of a
+LIST <filename> command.  If no such command has been entered then
+the the default filename "IECM51.LST" will be used.
+
+LIST<filename>
+
+This command will attempt to open <filename> as a writable file.  If a
+file with <filename> already exists then iECM-51 will ask if the file
+is to be overwritten or if the new data should be appended to the end
+of the existing file.  It will then open the file and stamp it with the
+current date and time from the system clock.  After this, commands
+entered by the user and the responses generated by iECM-51 will be
+recorded in the file.
+
+LOG
+
+This command behaves like the LOG <filename> command described below
+except that it uses the last <filename> that was entered as part of a
+LOG <filename> command.  If no such command has been entered then the
+default filename "IECM51.LOG" will be used.
+
+LOG <filename>
+
+This command will attempt to open <filename> as a writable file.  If a
+file with <filename> already exists then iECM-51 will ask if the file
+is to be overwritten or if the new data should be appended to the end
+of the file.  It will then open the file and stamp it with the current
+date and time from the system clock.  After this, commands entered by
+the user will be recorded in the file.  Note that this file may contain
+non-printable characters (e.g, ESC).
+
+LISTOFF and LISTON
+
+The LISTOFF closes a LIST file that has been specified by the LIST
+command.  This stops new list information from being recorded.  The
+LISTON re-opens the list file in the append mode so that recording can
+start again.  LISTON also stamps the list file with the current date and
+time from the system clock.
+
+LOGOFF and LOGON
+
+The LOGOFF closes a log file that has been specified by the LOG command.
+This stops new list information from being recorded.  The LOGON re-opens
+the log file in the append mode so that recording can start again.  LOGON
+also stamps the list file with the current date and time from the system
+clock.
+
+3.2 PROGRAM CONTROL
+
+Commands which control program execution allow the user to reset the
+processor, set execution breakpoints, start execution, stop execution,
+step, and super step.  Several of the commands in this group can perform
+several functions.  As an example, the GO command can start execution,
+set the program counter and modify breakpoints.  The commands will be
+grouped by their major function for the sake of discussion.
+
+3.2.1 Breakpoints
+
+iECM-51 provides an array of sixteen program execution breakpoints.  If a
+given breakpoint is inactive it is set to zero.  If it is active then it
+is set to the address of the first byte of an instruction.  Breakpoints
+set to addresses which are not the first byte of an instruction will
+cause unpredictable errors in the execution of the user's code.  When
+execution is started IECM-51 saves the user code byte at any active
+breakpoint and substitutes an LCALL instruction for that byte.  Executing
+this LCALL instruction will cause the iECM-51 to restore the user code
+bytes where the LCALL instructions were substituted and then decrement
+the user's program counter so that it points at the original instruction.
+The user's program will appear to stop execution immediately before
+executing the instruction with a breakpoint set on it.  All the LCALLs
+inserted by the iECM-51 will be removed from the user's code and the
+original code restored.
+
+Commands which set the breakpoint array are:
+
+  BR
+  BR [ <bp_number> ]
+  BR [ <bp_number> ] = <code_addr>
+
+The square brackets in the latter two commands are part of the command
+syntax and must be entered by the user.  The angle brackets are part of
+the "meta" language used to describe the syntax.  Breakpoints can be
+displayed while the user's code is running but they cannot be modified.
+
+NOTE: BR[0] and BR[1] can also be set by the GO command by using the TILL
+clause.  All of the breakpoints will be cleared by the GO command if the
+FOREVER clause is used.
+
+BR 
+
+This command will display all of active breakpoints (i.e.  those not set
+to zero).  The user will be informed if no breakpoints are active. 
+
+BR [ <bp_number> ]
+
+This command will display the setting of selected breakpoints and wait
+for input from the user.  If a carriage-return is entered the command
+will terminate.  If an ESC is entered the next sequential breakpoint will
+be displayed.  If a numeric value is entered then the selected breakpoint
+will be loaded with the value and the iECM-51 will again wait for input.
+At this point the user can enter either a CARRIAGE-RETURN or an ESC.  As
+before, the ESC will cause the iECM-51 to display the next breakpoint and
+the CARRIAGE-RETURN will terminate the command.  This command will wrap
+around from the last breakpoint (15t) to the first breakpoint (0).
+
+BR [ cbp_number> ] = <code_addr>
+
+This command sets the specific breakpoint specified by <bp_number> to the
+value <code_addr>.
+
+3.2.2 Program Execution
+
+These commands start and stop execution ot user code.  The commands
+provided are:
+
+ GO
+ GO FOREVER
+ GO FROM <code_addr>
+ GO FROM <code_addr> FOREVER
+ GO FROM <code_addr> TlLL <code_addr>
+ GO FROM <code_addr> TILL <code_addr> OR <code_addr>
+ GO TILL <code_addr>
+ GO TILL <code_addr> OR <code_addr>
+ HALT
+
+If a GO with breakpoint command is entered, the user code bytes at the
+breakpoints will be saved and LCALLs installed.  When a breakpoint is
+reached, the user's software will stop just before the instruction which
+caused the breakpoint and the iECM51 software will restore the original
+user code.  Note that this is different from the operation of most ICE
+modules which stop just after the instruction executes.  A problem
+associated with stopping before the break instruction executes is that
+subsequent GO commands may run into the breakpoint before any user code
+is executed.  The iECM-51 avoids this problem by skipping the setting of
+any breakpoints set on the instruction that the current PC points to.  If
+this happens to remove the last breakpoint set then the user will be
+warned but the GO will still execute with no breakpoints enabled.  If
+this happens the user can use the HALT command to stop the program.
+
+None of the GO commands can be executed while the user's code is already
+running; the HALT command cannot be executed if the user's code is not
+running.  The GO commands which set breakpoints use BP[0] and possibly
+BP[1].  Any break value already in one of these breakpoints will be
+overwritten and destroyed by these GO commands.  If possible the user
+should reserve the first two breakpoint for use by the GO commands and
+set the remaining breakpoints (if required) explicitly with the BR
+commands.
+
+GO
+
+This command starts execution of the user's code using the current value
+of user's program counter and the current setting of the breakpoint
+array.
+
+GO FOREVER
+
+This command clears the breakpoint array and then starts execution at the
+current value of the user's PC.
+
+GO FROM <code_addr>
+
+This command loads the user's PC with <code_addr> and then starts
+execution of the user s code using the current setting of the breakpoint
+array.
+
+GO FROM <code_addr> FOREVER
+
+This command loads the user's PC with <code_addr>, clears the breakpoint
+array, and starts execution of the user's code.
+
+GO FROM <code_addr> TILL <code_addr>
+
+This command loads the user's PC with the <code_addr> which follows the
+FROM keyword, sets the first breakpoint (BP[0]) to the <code_addr> which
+follows the TILL keyword, and then starts execution of the user's code.
+
+GO FROM <code_addr> TILL <code_addr> OR <code_addr>
+
+This command acts like the previous command except that it also sets the
+second breakpoint (BP[1]) to the <code_addr> which follows the OR
+keyword.
+
+GO TILL <code_addr>
+
+This command sets the first breakpoint (BP[0]) to <code_addr> and then
+starts the execution of user code using the current setting of the user's
+PC and the breakpoint array.
+
+GO TILL <code_addr> OR <code_addr>
+
+This command acts like the previous command except that it also sets the
+second breakpoint (BP[1]) to the <code_addr> which follows the OR
+keyword.
+
+HALT
+
+This command stops execution of user code by forcing the processor to
+execute a jump to self instruction in a reserved location.
+
+3.2.3 Program Stepping
+
+These commands are provided to allow stepping through programs one
+instruction at a time.  Between instructions the iECM-51 commands can be
+used to check the state of the variables changed by the instruction to
+ensure that the program is operating properly.  Stepping through code
+allows a far more detailed look at what is going on in the program.  The
+price that is paid for this detail is that stepping does not occur in
+real time; this makes it difficult to use on code that is tied to real
+time events.  Stepping while interrupts are enabled would be confusing
+since interrupt service routines will be stepped through as well as
+sequential code.  iECM-51 avoids this problem by artificially locking out
+interrupts while stepplng, ignoring the state of the interrupt enable
+(EA) or interrupt mask.  When in the HALTed state, all interrupts occur
+normally if enabled.
+
+iECM-51 implements the step operation by using an external interrupt.  To
+step over a given instruction, iECM-51 invokes an external interrupt by
+enabling the appropriate bit in the mask register, setting the interrupt
+to a high priority and clearing the port bit interrupt input.  After
+doing this it allows the user's program to execute one instruction by
+performing a RETI instruction within the monitor.  Once the RISM gains
+control again, it then restores all SFR bytes which were overwritten.
+The user code will only execute one instruction due to the pending
+high-priority interrupt.
+
+Super-stepping is similar to stepping.  It differs in that a subroutine
+call (and the body of the subroutine that is called) is treated as one
+indivisible instruction by the STEP process.  This allows the user to
+ignore the details of subroutines and interrupt service routines while
+checking out code.  Every time a CALL instruction is "super-stepped" all
+the service routines associated with enabled pending interrupts will be
+executed.  This may allow limited stepping through code while operating
+in a concurrent environment but the system will not operate in real time.
+A better approach is to use the GO command to execute to a specified
+breakpoint and then step through the code being tested looking for proper
+operation.
+
+Super-stepping is accomplished the same way as the STEP except for CALL
+instructions which are treated as a special case.  During a super-step a
+LCALL will be placed at the instruction following the CALL.  Interrupts
+are suppressed during STEP (not SS) operations by setting the step
+interrupt to a high priority.  Care must be taken to make sure the
+instruction which is executed (stepped) does not modify the IE, SP
+registers, or return addresses on the stack.  Several instructions which
+modify the EA and EXx bits could cause undefined operation of the iECM-51
+software.  During a GO or SS command all instructions are executed by the
+target.
+
+After a STEP command the next instruction to be executed by will be
+displayed on the console.
+
+The iECM-51 commands which implement step operations are:
+
+ STEP
+ STEP <count>
+ STEP FROM <code_addr>
+ STEP FROM <code_addr> <count>
+ SS
+ SS <count>
+ SS FROM <code_addr>
+ SS FROM <code_addr> <count>
+
+Aside from the the style of the actual step operation, the SS and STEP
+commands behave the same.  They will be described together.  The process
+of stepping or super-stepping that has been described above will be
+called single-stepping.
+
+{STEP|SS}
+This command single-steps one time.
+
+{STEP|SS}<count>
+This command single-steps <count> times.
+
+{STEP|SS} FROM <code_addr>
+This command loads the user's pc (PC) with <code_addr> and then
+single-steps one time.
+
+{STEP|SS} FROM <code_addr> <count>
+This command loads the user's pc (PC) with <code_addr> and then
+single_steps <count> times.
+
+3.3 DISPLAYING AND MODIFYING PROGRAM VARIABLES
+
+iECMA-51 provides commands to display and modify program variables in
+several formats.  In addltion to simple types of variables such as bytes
+and words, more complicated variables such as reals and character strings
+are supported.  iECM-51 commands allow variables to be displayed or
+initialized either individually or as regions of memory which contain
+variables of the given type.  The commands which operate on a program
+variable all start with a keyword which specifies the type of the
+variable.  The following paragraphs will introduce these keywords.
+
+  3.3.1 Supported Data Types
+
+This section will describe supported variable types.
+
+BIT
+A BIT is a single binary digit representing either the user flags or
+bit-addressable Special Function Registers.
+
+BYTE
+A BYTE is an unsigned eight-bit variable.
+
+CHAR
+A CHAR is a special case of a BYTE.  CHAR variables are displayed as
+ASCII characters.
+
+WORD
+A WORD is an unsigned 16-bit variable.  The address of a WORD is the
+address of its least significant byte.
+
+DWORD
+A DWORD is an unsigned 32-bit variable.  The address of a DWORD is the
+address of its least significant byte.  DWORD commands are not supported
+in the SFR memory space.
+
+REAL
+A REAL is a 32-bit binary floating point number that conforms to the IEEE
+specification for single precision reals.  The 32 bits contain a sign
+bit, an 8-bit exponent field, and a 23-bit fraction field.  iECM-51
+commands use standard scientific notation to deal with REAL numbers.
+Note that there are special representations for infinity and for NaN's
+(Not a Number--used to signal error conditions) if iECM-51 detects one of
+these special values it will output an appropriate text string instead of
+trying to display the value in scientific notation.  REAL commands are
+not supported in the SFR memory space.
+
+STACK
+A STACK variable is an unsigned 8-bit variable which resides in the
+system stack.  The addresses of stack variables (<stack_addr>) are taken
+to be relative to the current stack pointer and must be word aligned.
+
+STRING
+A STRING is a sequence of ASCII characters which are terminated by the
+NUL character.  The ASCII character NUL has the binary value of zero.
+
+In addition to supporting access to variables of the above types, iECM-51
+also provides commands to access the special program variables PC
+(program counter) PSW (program status word) and SP (stack pointer).
+These commands are discussed at the end of this section under the
+heading "Processor Variables".  The iECM-51 uses five entries in the
+user's stack to store the PC, PSW, ACC, and B registers when an interrupt
+to the target processor is generated. This makes the user's stack appear
+to have five extra entries in it whenever it is interrogated.  To
+compensate for this the iECM-51 automatically adjusts the SP up by five
+bytes whenever it is displayed.  This is convenient, but can be
+confusing.  There is a description of this offsetting in the section
+"Processor Variables".
+
+3.3.2 BIT Command
+
+There are four basic forms for the BIT commands:
+
+ BIT <bit_address>
+ BIT <bit_address> <bit_value>
+ BIT <bit_address> TO <bit_address>
+ BIT <bit_address> TO <bit_address> = <bit_value>
+
+All of these commands can be used whether or not the user's program is
+running.
+
+BIT <bit_address>
+This form is used to examine and then possibly change one or more
+sequential BIT variables. When this command is invoked iECM-51 will
+display the <bit_address> in hexadecimal notation, the value of the BIT
+in binary and wait for an input from the user.  The user can respond with
+a CARRIAGE-RETURN character, an ESC character, or by entering a numeric
+value. A CARRIAGE-RETURN will terminate the command.  An ESC will result
+in the display of the next sequential BIT variable.  If a numeric value
+is entered then the BIT variable will be set to this value and the iECM-
+51 will again wait for input.  At this point the user can respond only
+with an ESC or CARRIAGE-RETURN.  As before, the ESC will display the next
+sequential BIT and the CARRIAGE-RETURN will terminate the command
+
+BIT <bit_address> = <bit_value>
+This form is used to set an individual BIT variable without first
+checking its current value.  When invoked, this command sets the BIT
+variable at <bit_address> to <bit_value>.
+
+BIT <bit_address> TO <bit_address>
+This form is used to display a region of bit-addressable-memory as a
+sequence of BIT variables.  When this command is invoked, iECM-51 will
+start by displaying the current default base and then a series of lines
+showing the contents of the selected bit-addressable region.  Each line
+will start with a hexadecimal display of the address of the next BIT
+variable to be displayed followed by the display of up to 16 bits of BIT
+variables in binary.  A new line will be started whenever 16 bits have
+been displayed on the line.  The command terminates when all of the BIT
+variables in the selected range have been displayed.  During lengthy
+displays the user can stop the output to the console by hitting the SPACE
+bar.  Display can be resumed by hitting the SPACE bar a second time.  The
+command can be terminated by entering a CARRIAGE RETURN.
+
+BIT <bit_address> TO <bit_address> = <bit_value>
+This form is used to initialize a region of bit-addressable memory to the
+given <bit_value>.  Note that this command will take a little over a
+millisecond (at 9600 baud) for each BIT loaded.  This command can be
+terminated by entering a CARRIAGE-RETURN but this leaves only part of
+the memory region initialized. 
+
+3.3.3 BYTE Commands
+
+There are four basic forms for the BYTE commands:
+
+ BYTE <byte address>
+ BYTE <byte_address> = <byte_value>
+ BYTE <byte_address> TO <byte_address>
+ BYTE <byte_address> TO <byte_address> = <byte_value>
+
+All of these commands can be used whether or not the user's program is
+running
+
+BYTE <byte_address>
+This form is used to examine and then possibly change one or more
+sequential BYTE variables.  When this command is invoked iECM-51 will
+display the <byte_address> in hexadecimal notation, the value of the BYTE
+in the default base and wait for an input from the user.  The user can
+respond with a CARRIAGE-RETURN character, an ESC character, or by
+entering a numeric value.  A CARRIAGE-RETURN will terminate the command.
+An ESC will result in the display of the next sequential BYTE variable.
+If a numeric value is entered then the BYTE variable will be set to this
+value and the iECM-51 will again wait for input.  At this point the user
+can respond only with an ESC or CARRIAGE-RETURN.  As before, the ESC will
+display the next sequential BYTE and the CARRIAGE-RETURN will terminate
+the command.
+
+BYTE <byte_address> = <byte_value>
+This form is used to set an individual BYTE variable without first
+checking its current value.  When invoked, this command sets the BYTE
+variable at <byte_address> to <byte_value>.
+
+BYTE <byte_address> TO <byte_address>
+This form is used to display a region of memory as a sequence of BYTE
+variables.  When this command is invoked, iECM-51 will start by
+displaying the current default base and then a series of lines showing
+the contents of the selected memory region.  Each line will start with a
+hexadecimal display of the address of the next BYTE variable to be
+displayed followed by the display of up to 16 bytes of memory as BYTE
+variables in the default base.  A new line will be started whenever 16
+bytes of memory have been displayed on the line.  The command terminates
+when all of the BYTE variables in the selected range have been displayed.
+During lengthy displays the user can stop the output to the console by
+hitting the SPACE bar.  Display can be resumed by hitting the SPACE bar a
+second time.  The command can be terminated by entering a CARRIAGE-RETURN.
+
+BYTE <byte_address> TO <byte_address> = <byte_value>
+This form is used to initialize a region of memory to the given
+<byte_value>.  Note that this command will take a little over a
+millisecond (at 9600 baud) for each BYTE loaded.  This command can be
+terminated by entering a CARRIAGE-RETURN but this leaves only part of the
+memory region initialized.
+
+3.3.4 WORD Commands
+
+There are four basic forms for the WORD commands:
+
+ WORD <word_address>
+ WORD <word_address> = <word_value>
+ WORD <word_address> TO <word_address>
+ WORD <word_address> TO <word_address> = <word_value>
+
+All of these commands can be used whether or not the user's program is
+running.
+
+WORD <word_address>
+This form is used to examine and then possibly change one or more
+sequential WORD variables.  When this command is invoked the iECM-51
+will display the <word_address> in hexadecimal notation, the value of the
+WORD in the default base and wait for an input from the user.  The user
+can respond with a CARRIAGE-RETURN character, an ESC character, or by
+entering a numeric value.  A CARRIAGE-RETURN will terminate the
+command.  An ESC will result in the display of the next sequential WORD
+variable.  If a numeric value is entered then the WORD variable will be
+set to this value and the iECM-51 will again wait for input.  At this
+point the user can respond only with an ESC or CARRIAGE-RETURN.  As
+before, the ESC will display the next sequential WORD and the
+CARRIAGE-RETURN will terminate the command.
+
+WORD <word_address> = <word_value>
+This form is used to set an individual WORD variable without first
+checking its current value.  When invoked, this command sets the WORD
+variable at <word_address> to <word_value>.
+
+WORD <word_address> TO <word_address>
+This form is used to display a region of memory as a sequence of WORD
+variables.  When this command is invoked, iECM-51 will start by
+displaying the current default base and then a series of lines showing
+the contents of the selected memory region.  Each line will start with a
+hexadecimal display of the address of the next WORD variable to be
+displayed followed by the display of up to 16 bytes of memory as WORD
+variables in the default base.  A new line will be started whenever 16
+bytes of memory have been displayed on the line .  The command terminates
+when all of the WORD variables in the selected range have been displayed.
+During lengthy displays the user can stop the output to the console by
+hitting the SPACE bar.  Display can be resumed by hitting the SPACE bar a
+second time.  The command can be terminated by entering a CARRIAGE-
+RETURN.
+
+WORD <word_address> TO <word_address> = <word_value>
+This form is used to initialize a region of memory to the given
+<word_value>.  Note that this command will take a little over a
+millisecond (at 9600 baud) for each WORD loaded.This command can be
+terminated by entering a CARRIAGE-RETURN but this leaves only part of the
+memory region initialized.
+
+3.3.5 DWORD Commands
+
+There are four basic forms for the DWORD commands:
+
+ DWORD <dword_address>
+ DWORD <dword_address> = <dword_value>
+ DWORD <dword_address> TO <dword address>
+ DWORD <dword_address> TO <dword_address> = <dword_value>
+
+All of these commands can be used whether or not the user's program is
+running.
+
+DWORD <dword_address>
+This form is used to examine and then possibly change one or more
+sequential DWORD variables.  When this command is invoked iECM-51 will
+display the <dword_address> in hexadecimal notation, the value of the
+DWORD in the default base and wait for an input from the user.  The user
+can respond with a CARRIAGE-RETURN character, an ESC character, or by
+entering a numeric value.  A CARRIAGE-RETURN will terminate the
+command.  An ESC will result in the display of the next sequential DWORD
+variable.  If a numeric value is entered then the DWORD variable will be
+set to this value and the iECM-51 will again wait for input.  At this
+point the user can respond only with an ESC or CARRIAGE-RETURN.  As
+before, the ESC will display the next sequential DWORD and the CARRIAGE-
+RETURN will terminate the command.
+
+DWORD <dword_address> = <dword_value>
+This form is used to set an individual DWORD variable without first
+checking its current value.  When invoked, this command sets the DWORD
+variable at <dword_address> to <dword_value>.
+
+DWORD <dword_address> TO <dword_address>
+This form is used to display a region of memory as a sequence of DWORD
+variables.  When this command is invoked, iECM-51 will start by
+displaying the current default base and then a series of lines showing
+the contents of the selected memory region.  Each line will start with a
+hexadecimal display of the address of the next DWORD variable to be
+displayed followed by the display of up to 16 bytes of memory as DWORD
+variables in the default base.  A new line will be started whenever 16
+bytes of memory have been displayed on the line.  The command terminates
+when all of the DWORD variables in the selected range have been
+displayed.  During lengthy displays the user can stop the output to the
+console by hitting the SPACE bar.  Display can be resumed by hitting the
+SPACE bar a second time.  The command can be terminated by entering a
+CARRIAGE-RETURN.
+
+DWORD <dword_address> TO <dword_address> = <dword_value>
+This form is used to initialize a region of memory to the given
+<dword_value>.  Note that this command will take a little over a
+millisecond (at 9600 baud) for each DWORD loaded.  This command can be
+terminated by entering a CARRIAGE-RETURN but this leaves only part of
+the memory region initialized.
+
+3.3.6 REAL Commands
+
+There are four basic forms for the REAL commands:
+
+REAL <real_address>
+REAL <real_address> = <real_value>
+REAL <real_address> TO <real_address>
+REAL <real_address> TO <real_address> = <real_value>
+
+All of these commands can be used whether or not the user's program is
+running.
+
+REAL <real_address>
+This form is used to examine and then possibly change one or more
+sequential REAL variables.  When this command is invoked iECM-51 will
+display the <real address> in hexadecimal notation, the value of the REAL
+in the default base and wait for an input from the user.  The user can
+respond with a CARRIAGE-RETURN character, an ESC character, or by
+entering a numeric value.  A CARRIAGE-RETURN will terminate the command.
+An ESC will result in the display of the next sequential REAL variable.
+If a numeric value is entered then the REAL variable will be set to this
+value and the iECM-51 will again wait for input.  At this point the user
+can respond only with an ESC or CARRIAGE-RETURN.  As before, the ESC will
+display the next sequential REAL and the CARRIAGE-RETURN will terminate
+the command.
+
+REAL <real_address> = <real_value>
+This form is used to set an individual REAL variable without first
+checking its current value.  When invoked, this command sets the REAL
+variable at <real_address> to <real value>.
+
+REAL <real_address> TO <real_address>
+This form is used to display a region of memory as a sequence of REAL
+variables.  When this command is invoked, iECM-51 will display a series
+of lines showing the contents of the selected mernory.  Each line will
+start with a hexadecimal display of the address of the next REAL variable
+to be displayed followed by the display of up to 16 bytes of memory as
+REAL variables.  A new line will be started whenever 16 bytes of memory
+have been displayed on the line.  The command terminates when all of the
+REAL variables in the selected range have been displayed.  During lengthy
+displays the user can stop the output to the console by hitting the SPACE
+bar.  Display can be resumed by hitting the SPACE bar a second time.
+The command can be terminated by entering a CARRIAGE RETURN.
+
+REAL <real_address> TO <real_address> = <real_value>
+This form is used to initialize a region of memory to the given
+<real_value>.  Note that this command will take a little over a
+millisecond (at 9600 baud) for each REAL loaded.  This command can be
+terminated by entering a CARRIAGE-RETURN but this leaves only part of the
+memory region initialized.
+
+3.3.7 STACK Commands
+
+There are two basic forms for the STACK commands:
+
+ STACK <stack_address>
+ STACK <stack_address> TO <stack_address>
+
+Both of these commands can be used whether or not the user's program is
+running.  Since the stack resides in internal data memory.  these
+commands will only access that area regardless of the selected memory
+segment.
+
+STACK <stack_address>
+This command is useful for accessing a 8-bit variable which is known to
+be a fixed offset in the system stack.  When this command is invoked,
+iECM-51 executes a "DBYTE <byte_address>" command where the <byte_addr>
+is formed by adding <stack address> to the current value of the system
+stack pointer.
+
+STACK <stack_address> TO <stack_address>
+This command is useful for accessing a sequence of 8-bit variables which
+are known to start at a fixed offset in the system stack.  When this
+command is invoked, iECM-51 executes a "DBYTE <byte_address> TO
+<byte_address>" command where both <word_address> fields are formed by
+adding the corresponding <stack_address> to the current value of the
+system stack pointer.  During lengthy displays the user can stop the
+output to the console by hitting the SPACE bar.  Display can be resumed
+by hitting the SPACE bar a second time.  The command can be terminated by
+entering a CARRIAGE-RETURN.
+
+3.3.8 STRING commands.
+
+There is only one form of the STRING command: -
+
+STRING <byte_address>
+The next line will start with a hexadecimal display of <byte_address>
+followed by the NUL terminated ASCII string starting at that address.
+For long strings only the first 60 characters are displayed.  When
+trailing characters are stripped, decimal points (".") are substituted
+for the first three characters stripped.
+
+3.3.9 MEMORY SEGMENT SWITCHING
+
+If any of the preceding commands are replaced with a keyword from the
+following list, the selector byte will be updated to point to the desired
+memory area.
+
+CBYTE   DBYTE   RBYTE   XBYTE
+CWORD   DMWORD  RWORD   XWORD
+CDWORD  DDWORD          XDWORD
+CREAL   DREAL           XREAL
+CSTRING DSTRING         XSTRING
+
+The "C" prefix denotes a request to read the code segment.  A write to
+this area will only modify memory if program and data memory are
+hardware-overlayed.
+
+The "D" prefix selects read and write access to internal, on-chip data
+memory.
+
+The "R" prefix is used to examine and modify the internal SFR (Special
+Function Registers) region.  Since "DWORD", "STRING", and "REAL" data
+types would be meaningless for this segment, those types are not
+applicable.
+
+The "X" prefix changes the memory segment to read and write from external
+data memory.
+
+After invoking one of these commands, the segment selected will stay in
+effect until the next selection is made. The default upon invocation is
+the internal data segment.  The selected memory segment is displayed in
+the header information at the top of the screen.  BIT, STACK, DASM, and
+ASM commands have no effect on the segment selection, but always use the
+appropriate segment implied.
+
+3.3.10 Processor Variables
+
+Several commands are provided to access variables which are associated
+with the processor rather than with the program:
+
+ PC
+ PC=<byte_address>
+ PSW
+ PSW=<word_value>
+ SP
+ SP=<word_address>
+
+The processor variables can be modified only while the target is stopped
+but they can be read at any time.  These commands allow display and
+loading of the program counter (PC), program status word (PSW) and stack
+pointer (SP).  Display is in the default base.
+
+NOTE: The examination of the SP will be confusing if you don't understand
+the following paragraphs.
+
+The iECM-51 software uses up to eight bytes in the user's stack.  When
+the user displays the SP (or uses the STACK command) the value shown for
+SP is adjusted by five bytes to compensate for stack overhead so that it
+becomes more or less invisible to the user (the user must still allow for
+the extra stack space used).  This is convenient but creates confusion if
+you display using the SP command and then use the RBYTE command to look
+at location 81 H which is the register address of the stack pointer.
+Location 81 H may be up to 9 more than "SP"
+
+An additional consideration is what happens when you attempt to write
+Into the stack pointer using the SP command.  Before returning from the
+interrupt which actually updates the stackpointer the iECM-51 software
+places in the stack a return address and associated PSW for the idle loop
+it executes while the target is "stopped".  This prevents the target from
+getting lost upon return from the interrupt.  The iECM-51 software will
+allow the stack pointer to be modified directly from the console through
+the use of its register address (81 H).  Using the RBYTE command to
+modify SFR location 81 H will cause iECM-51 to lose control of the
+target.  The stack pointer should only be modified by the SP commands or
+by execution of user code in the target.  This decreases the possiblity
+of the target getting confused.
+
+Using the RBYTE command to examine or modify SFR location will access the
+PSW related to iRlSM activity, not the user PSW.  The PSW command will
+yield the correct/expected results.
+
+      3.4 ASSEMBLY AND DISASSEMBLY
+
+iECM-51 supports the examination and modification of code memory using
+the standard mnemonics for the MCS-51 assembler (ASM-51).  Although
+standard mnemonics are used, the iECM-51 does not build a symbol table of
+user symbols as assembly mnemonics are entered.  This makes it a
+single-line assembler (SLA) so called because all the information that is
+required to assemble object code is contained on a single line,
+references are never made to information entered on other lines.  The
+iECM-51 SLA will accept mnemonics for all instructions which can actually
+be executed by the target processor.  It will not accept "generic"
+instructions such as JMP or CALL which are processed by ASM-51 into
+standard MCS-51 instructions.  It will accept SJMP and SCALL or LCALL,
+etc.  which are the specific instructions that the hardware of the MCS-51
+processors understands.
+
+3.4.1 SLA (Single Line Assembly) Commands
+
+The commands which invoke the SLA are:
+
+ ASM <code address>
+
+ ASM
+
+The SLA is useful for writing short code pieces on-line for testing or
+patching programs but is not intended as a replacement for a true
+assembler.  The SLA can be invoked whether or not user code is running
+but there is an obvious danger in using it to modify code that is being
+executed.  In order for the SLA to properly store the user assembled
+code, it is necessary for the region of memory being modified to be
+mapped as 'overlayed' data and program area.  The SLA will only act on
+the code segment of memory regardless of the segment selected by iECM-51.
+
+ ASM <code addr>
+
+This command causes the iECM-51 software to enter the SLA mode.  The
+assembly program counter (APC) will be set to <code_addr> and lines of
+"assembly language" entered by the user will be converted to object code
+and loaded into the target's memory.  iECM-51 will warn if erroneous
+inputs are made but will remain in the SLA mode.  This mode is terminated
+by entering the only "directive" understood by the SLA: END.
+
+ASM
+
+This command operates identically to the ASM <code_addr> command except
+that the APC is not initialized.  If this is the first time that the SLA
+has been used then APC will be set to 0000H, if it is not then APC will
+point at the byte following the last instruction generated by the SLA.
+
+3.4.2 Disassembly Commands
+
+The disassembler converts binary object code in the target memory to
+ASM-51 mnemonics.  There are several commands which invoke the
+disassembler:
+
+ DASM
+
+ DASM <count>
+
+ DASM <code_addr>
+
+ DASM <code_addr>,<count>
+
+ DASM <code_addr> TO <code_addr>
+
+These commands are useful for examining a portion of the program for
+which listings are not available or for checking program patches and
+can be used whether or not user code is running.  The disassembler will
+only act on the code segment of memory regardless of the segment selected
+by iECM-51.
+
+ DASM
+
+This command disassembles the instruction currently pointed to by the
+user's program counter (PC).
+
+ DASM <count>
+
+This command reads the current value of the user's program counter (PC)
+and disassembles <count> instructions starting at that location.  The
+parameter <count> must be less than 256T (100H) so that the command
+parser can distinguish this command from the command "DASM <code_addr>".
+This restriction does not apply to the DASM <code_addr>,<count>
+instruction.  During lengthy displays the user can stop the output to the
+console by hitting the SPACE bar.  Display can be resumed by hitting the
+SPACE bar a second time.  The command can be terminated by entering a
+CARRIAGE-RETURN. 
+
+ DASM <code addr>
+
+This command disassembles the instruction at <code_addr>.  The parameter
+<code_addr> must be greater or equal to 256T (100H) so that the command
+parser can distinguish it from the DASM <count> instruction.
+
+ DASM <code_addr>,<count>
+
+This command disassembles <count> instructions starting with the one at
+<code_addr>.  During lengthy displays the user can stop the output to the
+console by hitting the SPACE bar.  Display can be resumed by hitting the
+SPACE bar a second time.  The command can be terminated by entering a
+CARRIAGE-RETURN.
+
+ DASM <code addr> TO <code addr>
+
+This command disassembles the region of memory specified.  If an
+instruction crosses the ending address of the region it will be
+completely disassembled before the command terminates.  During lengthy
+displays the user can stop the output to the console by hitting the SPACE
+bar.  Display can be resumed by hitting the SPACE bar a second time.  The
+command can be terminated by entering a CARRIAGE-RETURN.

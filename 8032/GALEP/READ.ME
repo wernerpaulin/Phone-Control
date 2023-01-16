@@ -1,0 +1,60 @@
+Wichtig: Ab sofort koennen Sie die jeweils neueste Version
+  der GALEP-Software aus unserer Mailbox (06071)9252-34 
+  gratis downloaden!
+
+=======================================================================
+GABRIELA 2.1
+
+Ab sofort liefern wir das neue GAL-Development-Paket GABRIELA 2.1
+gratis mit! GABRIELA besitzt alle Funktionen des Profi-Paketes GABY 2.1
+mit folgenden Ausnahmen:
+- kein PT-Minimierer und Expression-Evaluator,
+- keine Unterstuetzung fuer state machines,
+- SIMGABY simuliert nicht das GAL 20RA10.
+
+Sie können GABRIELA gegen eine Upgrade-Gebuehr von DM 198,- auf
+GABY 2.1 upgraden. Das GABY-Handbuch liegt jedem GALEP bei.
+Aus Kompatibilitätsgründen wird der GAL-Assembler PLAN weiterhin
+mitgeliefert.
+=======================================================================
+Ergaenzungen zum Handbuch:
+
+Neue Baustein-Typen implementiert (Seite 5):
+
+  - 8-MBit-EPROMs (27C8001)
+  - ATMEL 29Fxxx Flash-EPROMS
+  - ATMEL 89x51 Flash-Microcontroller
+  - ATMEL 89C52 Flash-Microcontroller
+  - Standard-RAMs
+
+Neue Features (Seite 8):
+
+  -ennnnn stellt die Eprom-Offsetadresse ein
+  
+  -onnnnn stellt die Pufferendadresse ein	
+
+  -xn ruft GALEP2.EXE im Batchmodus auf (n=p,r,v). Wie bei -an, jedoch
+    ohne Bildschirmausgabe zur Integration in bestehende
+    Benutzeroberflaechen.
+
+Regenerieren von GALs (Tip Seite 21):
+
+   Da das Master-Bit bei neueren GALs (B- und C-Typ) nicht mehr zur
+   Verfuegung steht, funktioniert dieser Trick mit den neuen GAL-Typen
+   nicht mehr.
+
+Programmierung von GALs B-Typen(Seite 5):
+   Entgegen der Darstellung im Handbuch lassen sich die B-Typen des GAL
+   6001 nicht programmieren.
+  	   
+Einstellung der Epromstartadresse bei einer Datenbreite von 2 oder 4 Byte:
+   Bei der Programmierung mit einer Datenbreite > 1 stimmt die einzugebende
+   Epromstartadresse nicht mit der physikalischen Epromadresse berein.
+   Die einzugebende Startadresse berechnet sich mit der Formel:
+
+             Epromstartadr. = Datenbreite * physik. Epromgstartadr.		
+
+   Beispiel:
+             Sie m”chten im Modus Datenbreite = 2 an der Epromadresse H1001 mit
+             der Programmierung beginnen, so mssen Sie als Epromstartadress
+             H2002 eingeben. 

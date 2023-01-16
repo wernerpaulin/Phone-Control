@@ -1,0 +1,436 @@
+MCS-51 MACRO ASSEMBLER    BLINK                                                                     27.Dezemb  PAGE    1
+
+
+DOS 6.22 (038-N) MCS-51 MACRO ASSEMBLER, V2.3
+OBJECT MODULE PLACED IN BLINK.OBJ
+ASSEMBLER INVOKED BY:  C:\RND\ASM\ASM51.EXE BLINK.SRC
+                       
+
+LOC  OBJ            LINE     SOURCE
+
+                       1     $DEBUG RB(0) XREF EP TITLE(BLINK) DATE(27.Dezember 2006) REGISTERBANK(0,1,2,3);
+                       2     NAME BLINK
+                       3     ;****************************************************************************;
+                       4     ;   Copyright:  2006  Werner Paulin                                          ;
+                       5     ;****************************************************************************;
+                       6     ;   Identification:                                                          ;
+                       7     ;       Function     blinking Port 1.x                                       ;
+                       8     ;       Filename     BLINK.src                                               ;
+                       9     ;****************************************************************************;
+                      10     ;   History:                                                                 ;
+                      11     ;   Version     Date        Author          Remarks                          ;
+                      12     ;   01.00       27.12.06    W. Paulin       created                          ;
+                      13     ;                                                                            ;
+                      14     ;****************************************************************************;
+                      15     ; Description:                                                               ;
+                      16     ; Port assignment:                                                           ;
+                      17     ;                 P1.0: blinking A                                           ;
+                      18     ;                 P1.1: blinking B                                           ;
+                      19     ;                                                                            ;
+                      20     ; Register assignment:                                                       ;
+                      21     ;                 *** bank 0 (RS1 = 0, RS0 = 0) ***                          ;
+                      22     ;                 R0: Serial port init wait time                             ;
+                      23     ;                 R1: Blink intervall                                        ;
+                      24     ;                                                                            ;
+                      25     ;****************************************************************************;
+                      26     
+                      27     
+                      28     ;************************** SEGMENT NAMES ***********************************;
+                      29     ?STACK          SEGMENT IDATA           ; stack
+                      30     VAR_I4          SEGMENT IDATA           ; internal byte data (4 bytes)
+                      31     VAR_BIT         SEGMENT BIT             ; internal bit data
+                      32     
+                      33     PRGM_MAIN       SEGMENT CODE            ; main program
+                      34     PRGM_BLINKCYC   SEGMENT CODE            ; sub program
+                      35     
+                      36     PRGM_IRQ_EXTI0  SEGMENT CODE            ; external IRQ
+                      37     PRGM_IRQ_TIMER0 SEGMENT CODE            ; timer 0 IRQ
+                      38     PRGM_IRQ_TIMER1 SEGMENT CODE            ; timer 1 IRQ
+                      39     PRGM_IRQ_SINT   SEGMENT CODE            ; serial com IRQ
+                      40     
+                      41     
+                      42     ;************************ MEMORY ALLOCATION *********************************;
+----                  43                     RSEG    ?STACK
+0000                  44                     DS      50
+                      45     
+----                  46                     RSEG    VAR_I4
+0000                  47                     DS      4
+                      48     
+----                  49                     RSEG    VAR_BIT
+0000                  50                     DBIT    20
+MCS-51 MACRO ASSEMBLER    BLINK                                                                     27.Dezemb  PAGE    2
+
+
+LOC  OBJ            LINE     SOURCE
+
+                      51     
+                      52     
+                      53     ;******************* RESET AND INTERRUPT VECTORS ****************************;
+----                  54                     CSEG    AT      RESET
+0000 020000   F       55                     LJMP    MAIN
+                      56     
+----                  57                     CSEG    AT      EXTI0
+0003 020000   F       58                     LJMP    IRQ_EXTI0
+                      59     
+----                  60                     CSEG    AT      TIMER0
+000B 020000   F       61                     LJMP    IRQ_TIMER0
+                      62     
+----                  63                     CSEG    AT      TIMER1
+001B 020000   F       64                     LJMP    IRQ_TIMER1
+                      65     
+----                  66                     CSEG    AT      SINT
+0023 020000   F       67                     LJMP    IRQ_SINT
+                      68     
+                      69     
+                      70     ;****************** TIMER 2 - 8032 ONLY -> MANUAL DEFINITION *****************;
+  00C8                71     T2CON           DATA    0C8H
+  00CF                72     TF2             BIT     0CFH
+  00CE                73     EXF2            BIT     0CEH
+  00CD                74     RCLK            BIT     0CDH
+  00CC                75     TCLK            BIT     0CCH
+  00CB                76     EXEN2           BIT     0CBH
+  00CA                77     TR2             BIT     0CAH
+  00C9                78     C_T2            BIT     0C9H
+  00C8                79     CP_RL2          BIT     0C8H
+  00CA                80     RCAP2L          DATA    0CAH
+  00CB                81     RCAP2H          DATA    0CBH
+  00CD                82     TH2             DATA    0CDH
+  00CC                83     TL2             DATA    0CCH
+  00AD                84     ET2             BIT     0ADH
+                      85     
+                      86     
+                      87     ;************************** VARIABLES / SYMBOLS *****************************;
+  0000                88     FLAG0           BIT     0                       ; any flag
+  0090                89     BLINK_A         BIT     P1.0
+  0091                90     BLINK_B         BIT     P1.1
+                      91     
+                      92     
+                      93     ;******************************* CONSTANTS **********************************;
+  0000                94     CONST_DEC       EQU      000D                    ; any constant
+  0000                95     CONST_HEX       EQU      000H                    ; any constant
+                      96     
+                      97     
+                      98     ;****************************************************************************;
+                      99     ; MACRO:        T0_INIT(SETTIME)                                             ;
+                     100     ; Remarks:      loads timer #0 and starts it                                 ;
+                     101     ;                                                                            ;
+                     102     ; Parameter:    SETTIME ...time to elapse                                    ;
+                     103     ;****************************************************************************;
+                     104     
+                     105     
+MCS-51 MACRO ASSEMBLER    BLINK                                                                     27.Dezemb  PAGE    3
+
+
+LOC  OBJ            LINE     SOURCE
+
+                     106     ;****************************************************************************;
+                     107     ; MACRO:        T1_INIT(SETTIME)                                             ;
+                     108     ; Remarks:      loads timer #1 and starts it                                 ;
+                     109     ;                                                                            ;
+                     110     ; Parameter:    SETTIME ...time to elapse                                    ;
+                     111     ;****************************************************************************;
+                     112     
+                     113     
+                     114     ;****************************************************************************;
+                     115     ; MACRO:        REGBANK(BANKNR)                                              ;
+                     116     ; Remarks:      activates a register bank                                    ;
+                     117     ;                                                                            ;
+                     118     ; Parameter:    BANKNR  ...number of bank to be activated                    ;
+                     119     ;****************************************************************************;
+                     120     
+                     121     
+                     122     
+                     123     ;****************************************************************************;
+                     124     ; IRQ SERVICE ROUTINE:  External Interrupt                                   ;
+                     125     ; Remarks:              to be defined...                                     ;
+                     126     ;****************************************************************************;
+----                 127                     RSEG    PRGM_IRQ_EXTI0
+0000 C2AF            128     IRQ_EXTI0:      clr     ea                      ; block all interrupts
+0002 C0E0            129                     push    ACC                     ; stack accu
+0004 C0D0            130                     push    PSW                     ; stack register bank
+                     131     
+                     132                     ; do something here
+                     133     
+0006 D0D0            134                     pop     PSW                     ; restore register bank data
+0008 D0E0            135                     pop     ACC                     ; restore accu
+000A D2AF            136                     setb    ea                      ; enable all interrupts
+000C 32              137                     RETI
+                     138     
+                     139     
+                     140     ;****************************************************************************;
+                     141     ; IRQ SERVICE ROUTINE:  Timer #0                                             ;
+                     142     ; Remarks:              to be defined...                                     ;
+                     143     ;****************************************************************************;
+----                 144                     RSEG    PRGM_IRQ_TIMER0
+0000 C2AF            145     IRQ_TIMER0:     clr     ea                      ; block all interrupts
+0002 C28C            146                     clr     TR0                     ; stop timer
+0004 C28D            147                     clr     TF0                     ; clear timer elapsed flag
+0006 C0E0            148                     push    ACC                     ; stack accu
+0008 C0D0            149                     push    PSW                     ; stack register bank
+                     150     
+                     151                     ; do something here
+                     152     
+000A D0D0            153                     pop     PSW                     ; restore register bank data
+000C D0E0            154                     pop     ACC                     ; restore accu
+000E D2AF            155                     setb    ea                      ; enable all interrupts
+0010 32              156                     RETI
+                     157     
+                     158     
+                     159     ;****************************************************************************;
+                     160     ; IRQ SERVICE ROUTINE:  Timer #1                                             ;
+MCS-51 MACRO ASSEMBLER    BLINK                                                                     27.Dezemb  PAGE    4
+
+
+LOC  OBJ            LINE     SOURCE
+
+                     161     ; Remarks:              to be defined...                                     ;
+                     162     ;****************************************************************************;
+----                 163                     RSEG    PRGM_IRQ_TIMER1
+0000 C2AF            164     IRQ_TIMER1:     clr     ea                      ; block all interrupts
+0002 C28E            165                     clr     TR1                     ; stop timer
+0004 C28F            166                     clr     TF1                     ; clear timer elapsed flag
+0006 C0E0            167                     push    ACC                     ; stack accu
+0008 C0D0            168                     push    PSW                     ; stack register bank
+                     169     
+                     170                     ; do something here
+                     171     
+000A D0D0            172                     pop     PSW                     ; restore register bank data
+000C D0E0            173                     pop     ACC                     ; restore accu
+000E D2AF            174                     setb    ea                      ; enable all interrupts
+0010 32              175                     RETI
+                     176     
+                     177     
+                     178     ;****************************************************************************;
+                     179     ; IRQ SERVICE ROUTINE:  Serial Interface (UART)                              ;
+                     180     ; Remarks:              to be defined...                                     ;
+                     181     ;****************************************************************************;
+----                 182                     RSEG    PRGM_IRQ_SINT
+0000 C2AF            183     IRQ_SINT:       clr     ea                      ; block all interrupts
+0002 C0E0            184                     push    ACC                     ; stack accu
+0004 C0D0            185                     push    PSW                     ; stack register bank
+                     186     
+                     187                     ; check whether frame was received or should be sent
+0006 209803          188                     jb      RI, RX_FRAME
+0009 020000   F      189                     jmp     TX_FRAME
+                     190     
+000C E599            191     RX_FRAME:       mov     A, SBUF                 ; read received byte
+000E 020000   F      192                     jmp     EXIT_IRQ_SINT
+                     193     
+0011 759900          194     TX_FRAME:       mov     SBUF, #00               ; send something
+0014 3099FD          195                     jnb     TI, $                   ; wait unit
+0017 020000   F      196                     jmp     EXIT_IRQ_SINT
+                     197     
+001A C298            198     EXIT_IRQ_SINT:  clr     RI                      ; reset receive indicator
+001C C299            199                     clr     TI                      ; reset transmit indicator
+001E D0D0            200                     pop     PSW                     ; restore register bank data
+0020 D0E0            201                     pop     ACC                     ; restore accu
+0022 D2AF            202                     setb    ea                      ; enable all interrupts
+0024 32              203                     RETI
+                     204     
+                     205     
+                     206     ;****************************************************************************;
+                     207     ; SUB PROGRAM:  BLINKCYC                                                     ;
+                     208     ; Remarks:      to be defined...                                             ;
+                     209     ;****************************************************************************;
+----                 210                     RSEG PRGM_BLINKCYC
+0000 C0E0            211     BLINKCYC:       push    ACC                     ; stack accu
+0002 C0D0            212                     push    PSW                     ; stack register bank
+                     213     
+0004 7814            214                     mov     R0, #20                 ; 1s blink intervall
+                     215 +1  WAIT_BLINK:     
+MCS-51 MACRO ASSEMBLER    BLINK                                                                     27.Dezemb  PAGE    5
+
+
+LOC  OBJ            LINE     SOURCE
+
+0006 C28C            216 +1                  clr     TR0
+0008 C28D            217 +1                  clr     TF0
+000A 758C3C          218 +2                  mov     TH0,  #HIGH(-50000)
+000D 758AB0          219 +2                  mov     TL0,  #LOW (-50000)
+0010 D28C            220 +1                  setb    TR0
+                     221 +1                 
+0012 308DFD          222                     jnb     TF0, $
+0015 D8EF            223                     djnz    R0, WAIT_BLINK
+0017 C28C            224                     clr     TR0                     ; stop timer
+                     225     
+0019 D0D0            226                     pop     PSW                     ; restore register bank data
+001B D0E0            227                     pop     ACC                     ; restore accu
+001D 22              228                     RET
+                     229     
+                     230     
+                     231     ;****************************************************************************;
+                     232     ; MAIN PROGRAM                                                               ;
+                     233     ; Remarks:      let port 1.0 and 1.1 blink in 1s intervall                   ;
+                     234     ;****************************************************************************;
+----                 235                     RSEG    PRGM_MAIN
+0000 C2AF            236     MAIN:           clr     EA                      ; block all interrupts
+0002 758100   F      237                     mov     SP, #?Stack-1           ; reset stack pointer
+                     238     
+                     239     ; reset variables
+0005 C200            240                     clr     FLAG0
+                     241     
+                     242     ; initialize Timer #0
+0007 5389F0          243                     anl     TMOD, #11110000b        ; Timer; TR controlled
+000A 438901          244                     orl     TMOD, #00000001b        ; Mode 1 -> 16Bit-Timer
+000D 5388CE          245                     anl     TCON, #11001110b        ; stop timer and clear TF
+0010 438801          246                     orl     TCON, #00000001b        ; /INT0 is edge sensitiv
+0013 C2A9            247                     clr     ET0                     ; disable IRQ -> handled in prgm
+                     248     
+                     249     ; initialize Timer #1
+0015 53890F          250                     anl     TMOD, #00001111b        ; Timer; TR controlled
+0018 438910          251                     orl     TMOD, #00010000b        ; Mode 1 -> 16Bit-Timer
+001B 53883E          252                     anl     TCON, #00111110b        ; stop timer and clear TF
+001E 438801          253                     orl     TCON, #00000001b        ; /INT0 is edge sensitiv
+0021 C2AB            254                     clr     ET1                     ; no IRQ -> handled in prgm
+                     255     
+                     256     ; initialize serial interface: 19200 Baud / 1 Start bit / 8 Data / 1 Stop bit / no parity
+0023 53C800          257                     anl     T2CON, #00000000b       ; reset timer 2 configuration
+0026 D2CD            258                     setb    RCLK                    ; timer 2 used as baudrate generator
+0028 D2CC            259                     setb    TCLK                    ;
+002A 75CBFF          260                     mov     RCAP2H, #HIGH(65518)    ; Baudrate = 19200 (FFh)
+002D 75CAEE          261                     mov     RCAP2L, #LOW(65518)     ; Baudrate = 19200 (EEh)
+                     262                                                     ; do not set TL2 and TH2!
+0030 C298            263                     clr     RI                      ; clear RX interrupt flag
+0032 C299            264                     clr     TI                      ; clear TX interrupt flag
+0034 C29F            265                     clr     SM0                     ; Mode 1 -> 8bit UART
+0036 D29E            266                     setb    SM1                     ; Mode 1 -> 8bit UART
+0038 D2CA            267                     setb    TR2                     ; start baudrate generator
+                     268     
+003A 7828            269                     mov     R0, #40                 ; wait 2s to activate UART
+                     270 +1  WAIT_SINT:      
+MCS-51 MACRO ASSEMBLER    BLINK                                                                     27.Dezemb  PAGE    6
+
+
+LOC  OBJ            LINE     SOURCE
+
+003C C28C            271 +1                  clr     TR0
+003E C28D            272 +1                  clr     TF0
+0040 758C3C          273 +2                  mov     TH0,  #HIGH(-50000)
+0043 758AB0          274 +2                  mov     TL0,  #LOW (-50000)
+0046 D28C            275 +1                  setb    TR0
+                     276 +1                 
+0048 308DFD          277                     jnb     TF0, $
+004B D8EF            278                     djnz    R0, WAIT_SINT
+004D D29C            279                     setb    REN                     ; enable receiver
+004F D2AC            280                     setb    ES                      ; enable serial interrupt
+                     281     
+                     282     
+                     283     ; *** cyclic main program ***
+                     284 +1  CYCLIC:         
+0051 C0E0            285 +1                   push   ACC                     ; stack accu
+0053 7400            286 +2                   mov    A, #0
+0055 540B            287 +1                   anl    A, #00000011            ; mask significant bits
+0057 C2D4            288 +1                   clr    RS1                     ; clear register bank control bits
+0059 C2D3            289 +1                   clr    RS0                     ;
+005B 23              290 +1                   rl     A                       ; shift bank bits at position in PSW
+005C 23              291 +1                   rl     A                       ;
+005D 23              292 +1                   rl     A
+005E 42D0            293 +1                   orl    PSW, A                  ; set bits in PSW according accu
+0060 D0E0            294 +1                   pop    ACC                     ; restore accu
+                     295 +1                  
+0062 D2AF            296                     setb    EA                      ; enable all interrupts
+                     297     
+0064 120000   F      298                     call    BLINKCYC
+                     299     
+0067 209007          300                     jb      BLINK_A, CLR_PORT       ; toggle port pins
+006A D290            301     SET_PORT:       setb    BLINK_A
+006C C291            302                     clr     BLINK_B
+006E 020000   F      303                     jmp     CYCLIC_END
+                     304     
+0071 C290            305     CLR_PORT:       clr     BLINK_A
+0073 D291            306                     setb    BLINK_B
+                     307     
+0075 80DA            308     CYCLIC_END:     jmp     CYCLIC                  ; close cycle
+                     309                     END                             ; eof
+MCS-51 MACRO ASSEMBLER    BLINK                                                                     27.Dezemb  PAGE    7
+
+
+XREF SYMBOL TABLE LISTING
+---- ------ ----- -------
+
+
+N A M E          T Y P E   V A L U E       ATTRIBUTES AND REFERENCES
+
+?STACK. . . . .  I SEG     0032H           REL=UNIT  29# 43 237
+ACC . . . . . .  D ADDR    00E0H   A         129 135 148 154 167 173 184 201 211 227 285 294
+BLINK_A . . . .  B ADDR    0090H.0 A         89# 300 301 305
+BLINK_B . . . .  B ADDR    0090H.1 A         90# 302 306
+BLINK . . . . .    ----    ----              2
+BLINKCYC. . . .  C ADDR    0000H   R       SEG=PRGM_BLINKCYC  211# 298
+C_T2. . . . . .  B ADDR    00C8H.1 A         78#
+CLR_PORT. . . .  C ADDR    0071H   R       SEG=PRGM_MAIN  300 305#
+CONST_DEC . . .    NUMB    0000H   A         94#
+CONST_HEX . . .    NUMB    0000H   A         95#
+CP_RL2. . . . .  B ADDR    00C8H.0 A         79#
+CYCLIC_END. . .  C ADDR    0075H   R       SEG=PRGM_MAIN  303 308#
+CYCLIC. . . . .  C ADDR    0051H   R       SEG=PRGM_MAIN  284# 308
+EA. . . . . . .  B ADDR    00A8H.7 A         128 136 145 155 164 174 183 202 236 296
+ES. . . . . . .  B ADDR    00A8H.4 A         280
+ET0 . . . . . .  B ADDR    00A8H.1 A         247
+ET1 . . . . . .  B ADDR    00A8H.3 A         254
+ET2 . . . . . .  B ADDR    00A8H.5 A         84#
+EXEN2 . . . . .  B ADDR    00C8H.3 A         76#
+EXF2. . . . . .  B ADDR    00C8H.6 A         73#
+EXIT_IRQ_SINT .  C ADDR    001AH   R       SEG=PRGM_IRQ_SINT  192 196 198#
+EXTI0 . . . . .  C ADDR    0003H   A         57
+FLAG0 . . . . .  B ADDR    0020H.0 A         88# 240
+IRQ_EXTI0 . . .  C ADDR    0000H   R       SEG=PRGM_IRQ_EXTI0  58 128#
+IRQ_SINT. . . .  C ADDR    0000H   R       SEG=PRGM_IRQ_SINT  67 183#
+IRQ_TIMER0. . .  C ADDR    0000H   R       SEG=PRGM_IRQ_TIMER0  61 145#
+IRQ_TIMER1. . .  C ADDR    0000H   R       SEG=PRGM_IRQ_TIMER1  64 164#
+MAIN. . . . . .  C ADDR    0000H   R       SEG=PRGM_MAIN  55 236#
+P1. . . . . . .  D ADDR    0090H   A         89 90
+PRGM_BLINKCYC .  C SEG     001EH           REL=UNIT  34# 210
+PRGM_IRQ_EXTI0.  C SEG     000DH           REL=UNIT  36# 127
+PRGM_IRQ_SINT .  C SEG     0025H           REL=UNIT  39# 182
+PRGM_IRQ_TIMER0  C SEG     0011H           REL=UNIT  37# 144
+PRGM_IRQ_TIMER1  C SEG     0011H           REL=UNIT  38# 163
+PRGM_MAIN . . .  C SEG     0077H           REL=UNIT  33# 235
+PSW . . . . . .  D ADDR    00D0H   A         130 134 149 153 168 172 185 200 212 226 293
+RCAP2H. . . . .  D ADDR    00CBH   A         81# 260
+RCAP2L. . . . .  D ADDR    00CAH   A         80# 261
+RCLK. . . . . .  B ADDR    00C8H.5 A         74# 258
+REN . . . . . .  B ADDR    0098H.4 A         279
+RESET . . . . .  C ADDR    0000H   A         54
+RI. . . . . . .  B ADDR    0098H.0 A         188 198 263
+RS0 . . . . . .  B ADDR    00D0H.3 A         289
+RS1 . . . . . .  B ADDR    00D0H.4 A         288
+RX_FRAME. . . .  C ADDR    000CH   R       SEG=PRGM_IRQ_SINT  188 191#
+SBUF. . . . . .  D ADDR    0099H   A         191 194
+SET_PORT. . . .  C ADDR    006AH   R       SEG=PRGM_MAIN  301#
+SINT. . . . . .  C ADDR    0023H   A         66
+SM0 . . . . . .  B ADDR    0098H.7 A         265
+SM1 . . . . . .  B ADDR    0098H.6 A         266
+SP. . . . . . .  D ADDR    0081H   A         237
+MCS-51 MACRO ASSEMBLER    BLINK                                                                     27.Dezemb  PAGE    8
+
+
+N A M E          T Y P E   V A L U E       ATTRIBUTES AND REFERENCES
+
+T2CON . . . . .  D ADDR    00C8H   A         71# 257
+TCLK. . . . . .  B ADDR    00C8H.4 A         75# 259
+TCON. . . . . .  D ADDR    0088H   A         245 246 252 253
+TF0 . . . . . .  B ADDR    0088H.5 A         147 217 222 272 277
+TF1 . . . . . .  B ADDR    0088H.7 A         166
+TF2 . . . . . .  B ADDR    00C8H.7 A         72#
+TH0 . . . . . .  D ADDR    008CH   A         218 273
+TH2 . . . . . .  D ADDR    00CDH   A         82#
+TI. . . . . . .  B ADDR    0098H.1 A         195 199 264
+TIMER0. . . . .  C ADDR    000BH   A         60
+TIMER1. . . . .  C ADDR    001BH   A         63
+TL0 . . . . . .  D ADDR    008AH   A         219 274
+TL2 . . . . . .  D ADDR    00CCH   A         83#
+TMOD. . . . . .  D ADDR    0089H   A         243 244 250 251
+TR0 . . . . . .  B ADDR    0088H.4 A         146 216 220 224 271 275
+TR1 . . . . . .  B ADDR    0088H.6 A         165
+TR2 . . . . . .  B ADDR    00C8H.2 A         77# 267
+TX_FRAME. . . .  C ADDR    0011H   R       SEG=PRGM_IRQ_SINT  189 194#
+VAR_BIT . . . .  B SEG     0014H           REL=UNIT  31# 49
+VAR_I4. . . . .  I SEG     0004H           REL=UNIT  30# 46
+WAIT_BLINK. . .  C ADDR    0006H   R       SEG=PRGM_BLINKCYC  215# 223
+WAIT_SINT . . .  C ADDR    003CH   R       SEG=PRGM_MAIN  270# 278
+
+
+REGISTER BANK(S) USED: 0 1 2 3
+
+ASSEMBLY COMPLETE, NO ERRORS FOUND

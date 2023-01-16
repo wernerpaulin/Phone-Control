@@ -1,0 +1,2 @@
+In dieser Version V1.00 sind sämtliche Kommunikations-Timeouts
+deakticiert worden.

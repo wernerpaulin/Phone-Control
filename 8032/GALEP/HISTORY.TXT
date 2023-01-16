@@ -1,0 +1,137 @@
+GALEP-History (Stand: 07.11.1995)
+
+In dieser Datei sind die Software-énderungen seit der GALEP-Version
+4.01 dokumentiert.
+
+Version 4.23:
+-Flash EPROM AT29C040A in die Software implementiert.
+-Fehler in der Loeschfunktion der Typen AT29C020 und AT29C040 behoben.
+
+Version 4.22:
+-Problem mit den EEPROMs 28Cxx behoben. Der Hardware Data Protection
+ Circuit hat das Schreiben des ersten Bytes verhindert, weil Vcc nicht
+ genÅgent Zeit hatte sich einzuschwingen.
+
+Version 4.21:
+-Bug bei der Algorithmuserkennung von National GALs 22V10 behoben.
+
+Version 4.20:
+-Algorithmus fÅr das GAL 22V10-B erweitert.
+-Bug im 132-Zeichen Modus behoben.
+
+Version 4.19:
+-Implementierung des Flash-Mikrokontrollers ATMEL 89C52 mit Vpp=12V o. 5V.
+-Die Eingabe der Pufferendadresse Åber den Kommandozeilenparameter -on hat
+ PrioritÑt gegenÅber der Fileendadresse. Jetzt kînnen auch im Batchmodus
+ Teilausschnitte des Puffers in das Eprom programmiert werden.
+-Bug bei der Eingabe der Epromstartadr. bei einer Datenbreite > 1 ist
+ behoben (siehe auch read.me).
+-Bei der Programmierung im Batchmodus wird der Ladezustand der Batterie
+ ÅberprÅft und der Hardwaretest durchgefÅhrt.
+
+Version 4.18:
+-Weitere Programmierpausen fÅr den 8751H eingefÅgt.
+
+Version 4.17:
+-Fehler bei der Programmierung der Atmel 29Cxxx EPROMS behoben.
+-In den Programmieralgorithmus fÅr die 8751- und 8752-Typen(ohne "C")
+ sind weitere Pausen eingefÅgt worden, um den Spannungsregler fÅr
+ Vcc nicht zu Åberlasten.
+-Neuer Schalter (-on) wurde versuchsweise eingefÅgt. Mit -on (n=0..FFFFF)
+ kann die Puffer- bzw. File-Endadresse eingegeben werden.
+
+Version 4.16:
+-Verbesserter Lîschalgorithmus fÅr die Bausteine AMD/Intel 28F010 u.
+ 28F020.
+-Implementierung der Flash-EEPROMS AMD28F010A und AMD28F020A
+
+Version 4.15:
+-Der Schalter -m1 (Puffermodus) im Batchmodus wird bei der Programmierung
+ von EPROMs nicht mehr ignoriert. EPROMs lassen jetzt auch im Batchmodus
+ Åber den Puffer programmieren.
+
+Version 4.14a:
+-Batteriegepufferte RAMs mit 8k und 32k SpeicherkapazitÑt lassen 
+ sich lesen und beschreiben.
+
+Version 4.14:
+-Motorola S-Records und Intel-Hex-Files werden auch mit zusÑtztlichen
+ Kommentarzeilen richtig erkannt.
+
+Version 4.13:
+-Zugriff auf Netzwerklaufwerke nun mîglich
+-Die "GALEP.DEF"- und die "GALEP.PRM"-Datei werden nun aus dem aktuellen
+ Pfad und nicht aus dem Pfad mit "GALEP2.EXE" geladen
+-Implementierung der Flash-EEPROMS SST28EE011,ATMEL 29C512,29C010,29C040
+-Implementierung der SRAM-Typen 8K,32K,128K
+-Implenentierung des EPROMS NEC27C8001
+-Implementierung des Flash-Mikrokontrollers ATMEL 89C51
+
+Version 4.12:
+-Teilbereiche des Puffers werden nun ohne AuffÅllen mit FÅllbytes abge-
+ speichert.
+
+Version 4.11:
+-im Batchmode werden die Programmierparameter nun nicht mehr abge-
+ speichert.
+
+Version 4.10:
+-Problem bei Rechnern mit einer bidirektionalen Parallelschnittstelle
+ wurde behoben.
+-Neuer Batchmode ohne Bildschirmausgabe wurde implementiert
+ (-xn : n=r Lesen, n=p Programmieren, n=v Verifizieren).
+-Vorgabe der Eprom-Startadresse mittels -Ennnnn wurde implemen-
+ tiert.
+
+
+Version 4.07:
+Die Mîglichkeit, den Schreibschutz bei den Typen 28C256 und
+29C256 zu setzen bzw. zu lîschen, wurde aus hardwaretechnischen
+GrÅnden wieder entfernt.
+
+
+Version 4.06:
+- Das Programm GALEP2.EXE lÑuft nicht auf bestimmten Rechnern
+ (z.B. einigen Laptops) wegen Inkompatibilitaet der Drucker-
+ Schnittstelle oder extrem flach ansteigenden Centronic-Pegeln
+ (Toshiba T1200, T1800, OKANO 386SX/20). Fuer diese Rechner
+ wurde das Programm GALEP2S.EXE hinzugefuegt.
+- Beim Abspeichern von JEDEC-Dateien wird der komplette GAL-Name
+ abgespeichert (Bsp.: GAL22V10).
+
+
+Version 4.03:
+- Motorola-S3-Records werden unterstÅtzt (Endung .S3 und .MS3).
+- FÅr jede Datei-Art kann ein Adre·-Offset angegeben werden, um die
+  Datei erst ab dieser Adresse zu laden (0..7FFFFFFF).
+  Beim Abspeichern ist dieser Offset nicht relevant, um den
+  DatentrÑger nicht mit unnîtigen Daten zu fÅllen.
+  Der Kommandozeilen-Parameter lautet: -hn (n: 0..7FFFFFFF)
+  Der Adre·-Offset wird unter 'PARAMETER' (F10) und anschliessendem
+  BetÑtigen der Funktionstaste F2 eingegeben.
+  Die Anzeige 'Puffer Start Adr' wechselt dann zu 'Offset Adr'.
+  Ein Stern '*' kennzeichnet beim Verlassen der Parameter-Eingabe
+  einen von Null verschiedenen Adre·-Offset.
+  Bsp.:
+	 GALEP2 TEST.HEX -s1000 -hF0000
+  lÑdt die Datei 'TEST.HEX' erst ab dem Record mit der Adresse
+  F0000h in den Puffer ab der Adresse 1000h.
+
+- EEPROMs 29F010, 29F040 provisorisch implementiert
+ (ACHTUNG: 128KB benîtigen ca. 1,5 Std. Programmierzeit auf
+  einem 486er/33MHz!!)
+- Beim Typ 28C256 kann jetzt der Schreibschutz aktiviert werden.
+  Vor dem Programmieren wird er jedoch zurÅckgesetzt, wie auch
+  beim 29C256.
+- Implementation der Reihe 8751.
+  (ACHTUNG: Bitte stellen Sie beim Programmieren der NICHT-CMOS-
+  Versionen der 8751-, 8752-Typen das Netzteil auf 9 Volt !!!)
+  Aus technischen GrÅnden muss beim Programmieren von NICHT-CMOS-
+  Versionen alle 256 Bytes eine Pause von ca. 30s eingelegt werden.
+  Der Programmiervorgang dauert daher entsprechend lÑnger.
+
+
+Version 4.02:
+
+- Memorycards lassen sich jetzt programmieren.
+

@@ -1,0 +1,312 @@
+$DEBUG RB(0) XREF EP TITLE(BLINK) DATE(27.Dezember 2006) REGISTERBANK(0,1,2,3);
+NAME BLINK
+;****************************************************************************;
+;   Copyright:  2006  Werner Paulin                                          ;
+;****************************************************************************;
+;   Identification:                                                          ;
+;       Function     blinking Port 1.x                                       ;
+;       Filename     BLINK.src                                               ;
+;****************************************************************************;
+;   History:                                                                 ;
+;   Version     Date        Author          Remarks                          ;
+;   01.00       27.12.06    W. Paulin       created                          ;
+;                                                                            ;
+;****************************************************************************;
+; Description:                                                               ;
+; Port assignment:                                                           ;
+;                 P1.0: blinking A                                           ;
+;                 P1.1: blinking B                                           ;
+;                                                                            ;
+; Register assignment:                                                       ;
+;                 *** bank 0 (RS1 = 0, RS0 = 0) ***                          ;
+;                 R0: Serial port init wait time                             ;
+;                 R1: Blink intervall                                        ;
+;                                                                            ;
+;****************************************************************************;
+
+
+;************************** SEGMENT NAMES ***********************************;
+?STACK          SEGMENT IDATA           ; stack
+VAR_I4          SEGMENT IDATA           ; internal byte data (4 bytes)
+VAR_BIT         SEGMENT BIT             ; internal bit data
+
+PRGM_MAIN       SEGMENT CODE            ; main program
+PRGM_BLINKCYC   SEGMENT CODE            ; sub program
+
+PRGM_IRQ_EXTI0  SEGMENT CODE            ; external IRQ
+PRGM_IRQ_TIMER0 SEGMENT CODE            ; timer 0 IRQ
+PRGM_IRQ_TIMER1 SEGMENT CODE            ; timer 1 IRQ
+PRGM_IRQ_SINT   SEGMENT CODE            ; serial com IRQ
+
+
+;************************ MEMORY ALLOCATION *********************************;
+                RSEG    ?STACK
+                DS      50
+
+                RSEG    VAR_I4
+                DS      4
+
+                RSEG    VAR_BIT
+                DBIT    20
+
+
+;******************* RESET AND INTERRUPT VECTORS ****************************;
+                CSEG    AT      RESET
+                LJMP    MAIN
+
+                CSEG    AT      EXTI0
+                LJMP    IRQ_EXTI0
+
+                CSEG    AT      TIMER0
+                LJMP    IRQ_TIMER0
+
+                CSEG    AT      TIMER1
+                LJMP    IRQ_TIMER1
+
+                CSEG    AT      SINT
+                LJMP    IRQ_SINT
+
+
+;****************** TIMER 2 - 8032 ONLY -> MANUAL DEFINITION *****************;
+T2CON           DATA    0C8H
+TF2             BIT     0CFH
+EXF2            BIT     0CEH
+RCLK            BIT     0CDH
+TCLK            BIT     0CCH
+EXEN2           BIT     0CBH
+TR2             BIT     0CAH
+C_T2            BIT     0C9H
+CP_RL2          BIT     0C8H
+RCAP2L          DATA    0CAH
+RCAP2H          DATA    0CBH
+TH2             DATA    0CDH
+TL2             DATA    0CCH
+ET2             BIT     0ADH
+
+
+;************************** VARIABLES / SYMBOLS *****************************;
+FLAG0           BIT     0                       ; any flag
+BLINK_A         BIT     P1.0
+BLINK_B         BIT     P1.1
+
+
+;******************************* CONSTANTS **********************************;
+CONST_DEC       EQU      000D                    ; any constant
+CONST_HEX       EQU      000H                    ; any constant
+
+
+;****************************************************************************;
+; MACRO:        T0_INIT(SETTIME)                                             ;
+; Remarks:      loads timer #0 and starts it                                 ;
+;                                                                            ;
+; Parameter:    SETTIME ...time to elapse                                    ;
+;****************************************************************************;
+%*DEFINE( T0_INIT(SETTIME) )
+               (
+                clr     TR0
+                clr     TF0
+                mov     TH0,  #HIGH(%SETTIME)
+                mov     TL0,  #LOW (%SETTIME)
+                setb    TR0
+               )
+
+;****************************************************************************;
+; MACRO:        T1_INIT(SETTIME)                                             ;
+; Remarks:      loads timer #1 and starts it                                 ;
+;                                                                            ;
+; Parameter:    SETTIME ...time to elapse                                    ;
+;****************************************************************************;
+%*DEFINE( T1_INIT(SETTIME) )
+               (
+                clr     TR1
+                clr     TF1
+                mov     TH1,  #HIGH(%SETTIME)
+                mov     TL1,  #LOW (%SETTIME)
+                setb    TR1
+               )
+
+;****************************************************************************;
+; MACRO:        REGBANK(BANKNR)                                              ;
+; Remarks:      activates a register bank                                    ;
+;                                                                            ;
+; Parameter:    BANKNR  ...number of bank to be activated                    ;
+;****************************************************************************;
+%*DEFINE( REGBANK(BANKNR) )
+                (
+                 push   ACC                     ; stack accu
+                 mov    A, #%BANKNR
+                 anl    A, #00000011            ; mask significant bits
+                 clr    RS1                     ; clear register bank control bits
+                 clr    RS0                     ;
+                 rl     A                       ; shift bank bits at position in PSW
+                 rl     A                       ;
+                 rl     A
+                 orl    PSW, A                  ; set bits in PSW according accu
+                 pop    ACC                     ; restore accu
+                )
+
+
+;****************************************************************************;
+; IRQ SERVICE ROUTINE:  External Interrupt                                   ;
+; Remarks:              to be defined...                                     ;
+;****************************************************************************;
+                RSEG    PRGM_IRQ_EXTI0
+IRQ_EXTI0:      clr     ea                      ; block all interrupts
+                push    ACC                     ; stack accu
+                push    PSW                     ; stack register bank
+
+                ; do something here
+
+                pop     PSW                     ; restore register bank data
+                pop     ACC                     ; restore accu
+                setb    ea                      ; enable all interrupts
+                RETI
+
+
+;****************************************************************************;
+; IRQ SERVICE ROUTINE:  Timer #0                                             ;
+; Remarks:              to be defined...                                     ;
+;****************************************************************************;
+                RSEG    PRGM_IRQ_TIMER0
+IRQ_TIMER0:     clr     ea                      ; block all interrupts
+                clr     TR0                     ; stop timer
+                clr     TF0                     ; clear timer elapsed flag
+                push    ACC                     ; stack accu
+                push    PSW                     ; stack register bank
+
+                ; do something here
+
+                pop     PSW                     ; restore register bank data
+                pop     ACC                     ; restore accu
+                setb    ea                      ; enable all interrupts
+                RETI
+
+
+;****************************************************************************;
+; IRQ SERVICE ROUTINE:  Timer #1                                             ;
+; Remarks:              to be defined...                                     ;
+;****************************************************************************;
+                RSEG    PRGM_IRQ_TIMER1
+IRQ_TIMER1:     clr     ea                      ; block all interrupts
+                clr     TR1                     ; stop timer
+                clr     TF1                     ; clear timer elapsed flag
+                push    ACC                     ; stack accu
+                push    PSW                     ; stack register bank
+
+                ; do something here
+
+                pop     PSW                     ; restore register bank data
+                pop     ACC                     ; restore accu
+                setb    ea                      ; enable all interrupts
+                RETI
+
+
+;****************************************************************************;
+; IRQ SERVICE ROUTINE:  Serial Interface (UART)                              ;
+; Remarks:              to be defined...                                     ;
+;****************************************************************************;
+                RSEG    PRGM_IRQ_SINT
+IRQ_SINT:       clr     ea                      ; block all interrupts
+                push    ACC                     ; stack accu
+                push    PSW                     ; stack register bank
+
+                ; check whether frame was received or should be sent
+                jb      RI, RX_FRAME
+                jmp     TX_FRAME
+
+RX_FRAME:       mov     A, SBUF                 ; read received byte
+                jmp     EXIT_IRQ_SINT
+
+TX_FRAME:       mov     SBUF, #00               ; send something
+                jnb     TI, $                   ; wait unit
+                jmp     EXIT_IRQ_SINT
+
+EXIT_IRQ_SINT:  clr     RI                      ; reset receive indicator
+                clr     TI                      ; reset transmit indicator
+                pop     PSW                     ; restore register bank data
+                pop     ACC                     ; restore accu
+                setb    ea                      ; enable all interrupts
+                RETI
+
+
+;****************************************************************************;
+; SUB PROGRAM:  BLINKCYC                                                     ;
+; Remarks:      to be defined...                                             ;
+;****************************************************************************;
+                RSEG PRGM_BLINKCYC
+BLINKCYC:       push    ACC                     ; stack accu
+                push    PSW                     ; stack register bank
+
+                mov     R0, #20                 ; 1s blink intervall
+WAIT_BLINK:     %T0_INIT(-50000)
+                jnb     TF0, $
+                djnz    R0, WAIT_BLINK
+                clr     TR0                     ; stop timer
+
+                pop     PSW                     ; restore register bank data
+                pop     ACC                     ; restore accu
+                RET
+
+
+;****************************************************************************;
+; MAIN PROGRAM                                                               ;
+; Remarks:      let port 1.0 and 1.1 blink in 1s intervall                   ;
+;****************************************************************************;
+                RSEG    PRGM_MAIN
+MAIN:           clr     EA                      ; block all interrupts
+                mov     SP, #?Stack-1           ; reset stack pointer
+
+; reset variables
+                clr     FLAG0
+
+; initialize Timer #0
+                anl     TMOD, #11110000b        ; Timer; TR controlled
+                orl     TMOD, #00000001b        ; Mode 1 -> 16Bit-Timer
+                anl     TCON, #11001110b        ; stop timer and clear TF
+                orl     TCON, #00000001b        ; /INT0 is edge sensitiv
+                clr     ET0                     ; disable IRQ -> handled in prgm
+
+; initialize Timer #1
+                anl     TMOD, #00001111b        ; Timer; TR controlled
+                orl     TMOD, #00010000b        ; Mode 1 -> 16Bit-Timer
+                anl     TCON, #00111110b        ; stop timer and clear TF
+                orl     TCON, #00000001b        ; /INT0 is edge sensitiv
+                clr     ET1                     ; no IRQ -> handled in prgm
+
+; initialize serial interface: 19200 Baud / 1 Start bit / 8 Data / 1 Stop bit / no parity
+                anl     T2CON, #00000000b       ; reset timer 2 configuration
+                setb    RCLK                    ; timer 2 used as baudrate generator
+                setb    TCLK                    ;
+                mov     RCAP2H, #HIGH(65518)    ; Baudrate = 19200 (FFh)
+                mov     RCAP2L, #LOW(65518)     ; Baudrate = 19200 (EEh)
+                                                ; do not set TL2 and TH2!
+                clr     RI                      ; clear RX interrupt flag
+                clr     TI                      ; clear TX interrupt flag
+                clr     SM0                     ; Mode 1 -> 8bit UART
+                setb    SM1                     ; Mode 1 -> 8bit UART
+                setb    TR2                     ; start baudrate generator
+
+                mov     R0, #40                 ; wait 2s to activate UART
+WAIT_SINT:      %T0_INIT(-50000)
+                jnb     TF0, $
+                djnz    R0, WAIT_SINT
+                setb    REN                     ; enable receiver
+                setb    ES                      ; enable serial interrupt
+
+
+; *** cyclic main program ***
+CYCLIC:         %REGBANK(0)
+                setb    EA                      ; enable all interrupts
+
+                call    BLINKCYC
+
+                jb      BLINK_A, CLR_PORT       ; toggle port pins
+SET_PORT:       setb    BLINK_A
+                clr     BLINK_B
+                jmp     CYCLIC_END
+
+CLR_PORT:       clr     BLINK_A
+                setb    BLINK_B
+
+CYCLIC_END:     jmp     CYCLIC                  ; close cycle
+                END                             ; eof

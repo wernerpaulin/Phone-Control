@@ -1,0 +1,2200 @@
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE    1
+
+
+DOS 7.10 (038-N) MCS-51 MACRO ASSEMBLER, V2.3
+OBJECT MODULE PLACED IN POI.OBJ
+ASSEMBLER INVOKED BY:  ASM51.EXE POI.SRC
+                       
+
+LOC  OBJ            LINE     SOURCE
+
+                       1     $DEBUG RB(0) XREF EP TITLE(POI) DATE(16.August 1997) REGISTERBANK(0,1,2,3)   ;
+                       2     NAME POI
+                       3     ;****************************************************************************;
+                       4     ;   Copyright:  1997  WePa - Entwicklungsabteilung                           ;
+                       5     ;****************************************************************************;
+                       6     ;   Kennzeichnung:                                                           ;
+                       7     ;       ID-Nr.       030209019677                                            ;
+                       8     ;       System       Phone-Control                                           ;
+                       9     ;       Sub-System   Phone-Control Operating Interface -POI                  ;
+                      10     ;       Funktion     Interface zwischen POS (Phone-Control Operating System) ;
+                      11     ;                    und dem Anwender                                        ;
+                      12     ;       Filename     POI.src                                                 ;
+                      13     ;****************************************************************************;
+                      14     ;   History:                                                                 ;
+                      15     ;   Version     Datum       Autor           Bemerkung                        ;
+                      16     ;   00.01       16.08.97    W. Paulin       Erstellung                       ;
+                      17     ;   00.02       20.08.97    W. Paulin       Einbau des Kommunikationsmodell  ;
+                      18     ;   00.03       19.10.97    W. Paulin       Korrekturen durchgef^hrt         ;
+                      19     ;   00.04       21.10.97    W. Paulin       Phone-Handling /Ringing-Upgm.    ;
+                      20     ;   00.05       25.10.97    W. Paulin       WP2_READ als Unterprogramm       ;
+                      21     ;                                           PIN-Manager                      ;   
+                      22     ;   00.06       08.11.97    W. Paulin       Service: Anwenderschnittstelle   ;
+                      23     ;   01.00       15.11.97    W. Paulin       1. Release                       ;
+                      24     ;   01.01       22.11.97    W. Paulin       USC_ON bei Init auf Null setzen  ;
+                      25     ;                                                                            ;
+                      26     ;****************************************************************************;
+                      27     ; Beschreibung :                                                             ;
+                      28     ;               Das POI ist die Schnittstelle zum Anwender.                  ;
+                      29     ;               Es sorgt f^r die Dekodierung der empfangenen Daten und       ;
+                      30     ;               steuert angeschlossene Hardware an.                          ;
+                      31     ;               Alle empfangenen Daten werden an den PC ^ber eine RS232-     ;
+                      32     ;               Schnitstelle ^ber das Protokoll WP2000 gesendet.             ;
+                      33     ;               Empfangene Audiosignale werden an den PC weitergeleitet.     ;
+                      34     ;****************************************************************************;
+                      35     ;                                                                            ;
+                      36     ;
+                      37     ;Port-Pin-Vergabe:
+                      38     ;                 P1.7: Eingang f^r L^utsignal
+                      39     ;                 P1.6: Ausgang zum Abheben
+                      40     ;                 P1.5: Triggerung MFAUS
+                      41     ;                 P1.4: Triggerung MFEIN
+                      42     ;                 P1.3: Aktivierung durch Taste "4"
+                      43     ;                 P1.2: Aktivierung durch Taste "3"
+                      44     ;                 P1.1: Aktivierung durch Taste "2"
+                      45     ;                 P1.0: Aktivierung durch Taste "1"
+                      46     ;
+                      47     ;Ext. Interrupt-Vergabe:
+                      48     ;                       /INT0: DTMF-codierte Taste liegt an Ausgangspins an
+                      49     ;
+                      50     ;Register-Verwendung:
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE    2
+
+
+LOC  OBJ            LINE     SOURCE
+
+                      51     ;                    *** Registerbank 0 (RS1 = 0, RS0 = 0) ***
+                      52     ;                    --- Ring - Manager u. Initialisierung ---
+                      53     ;                    R0: Port-Init-Wartezeit; Pick-Up-Nummer (Startwert)
+                      54     ;                    R1: Remote Pick-Up - Time ;um fremdes Abheben zu erkennen
+                      55     ;                    --- PIN - Manager ---   
+                      56     ;                    R0: aktuelle PIN-Adresse
+                      57     ;                    R2: PIN-Timeout
+                      58     ;                    R3: PIN-Counter
+                      59     ;                    --- SERVICE ---
+                      60     ;                    R2: Tastendruck-Timeout; HESCH-Timeout, Cut-Off - Timeout
+                      61     ;                    R3: Ausschaltverz^gerung bei Hardware-Reset
+                      62     ;                    --- Ein - und Ausschaltsignal - Ansteuerung ---
+                      63     ;                    R3: Ausblendzeit f^r externen Interrupt
+                      64     ;                    R4: not in use
+                      65     ;                    R5: not in use
+                      66     ;                    R6: not in use
+                      67     ;                    R7: not in use
+                      68     ;
+                      69     ;                    *** Registerbank 1 (RS1 = 0, RS0 = 1) ***
+                      70     ;                    --- TXD - und RXD - Handshake ---
+                      71     ;                    R0: Adressen-Speicher f^r indirekte Adr. (TXD_HS/RXD_HS)
+                      72     ;                    R1: Z^hlreg. z. Auslesen der 8 Teilframes (TXD_HS/RXD_HS)
+                      73     ;                        Berechnung der Checksumme (TXD_HS/RXD_HS)
+                      74     ;                    R2: Retry-Speicher: Startwert: RETRY_INI := 3 (Empfang)
+                      75     ;                    R3: Retry-Speicher: Startwert: RETRY_INI := 3 (Senden)
+                      76     ;                    --- TX_PIN - Unterprogramm ---
+                      77     ;                    R0: Adressen-Speicher f^r indirekte Adr. 
+                      78     ;                    R1: Adressen-Speicher f^r indirekte Adr. 
+                      79     ;                    R4: Z^hlreg. z. Auslesen des PIN-Speichers  
+                      80     ;                    --- Register f^r Interruptservice-Routine ---
+                      81     ;                    R4: not in use
+                      82     ;                    R5: not in use
+                      83     ;                    R6: not in use
+                      84     ;                    R7: not in use
+                      85     ;                       
+                      86     ;                    *** Registerbank 2 (RS1 = 1, RS0 = 0) ***
+                      87     ;                    --- Sendeframe-Buffer ---
+                      88     ;                    R0: Frame-Sektion 0: Auftrags-ID
+                      89     ;                    R1: Frame-Sektion 1: Adress-Register
+                      90     ;                    R2: Frame-Sektion 2: Status-Register
+                      91     ;                    R3: Frame-Sektion 3: Daten-Register #0
+                      92     ;                    R4: Frame-Sektion 4: Daten-Register #1
+                      93     ;                    R5: Frame-Sektion 5: Daten-Register #2
+                      94     ;                    R6: Frame-Sektion 6: Daten-Register #3
+                      95     ;                    R7: Frame-Sektion 7: Check-Summe
+                      96     ;
+                      97     ;                    *** Registerbank 3 (RS1 = 1, RS0 = 1) ***
+                      98     ;                    --- Empfangsframe-Buffer ---
+                      99     ;                    R0: Frame-Sektion 0: Auftrags-ID
+                     100     ;                    R1: Frame-Sektion 1: Adress-Register
+                     101     ;                    R2: Frame-Sektion 2: Status-Register
+                     102     ;                    R3: Frame-Sektion 3: Daten-Register #0
+                     103     ;                    R4: Frame-Sektion 4: Daten-Register #1
+                     104     ;                    R5: Frame-Sektion 5: Daten-Register #2
+                     105     ;                    R6: Frame-Sektion 6: Daten-Register #3
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE    3
+
+
+LOC  OBJ            LINE     SOURCE
+
+                     106     ;                    R7: Frame-Sektion 7: Check-Summe
+                     107     ;
+                     108     ;
+                     109     ;SEGMENT - NAMEN:
+                     110     ;
+                     111     ?STACK                  SEGMENT IDATA           ;eigenen Stackbereich allok.
+                     112     INTSERV                 SEGMENT CODE            ;Interruptservice-Routine
+                     113     HAUPTPRG                SEGMENT CODE            ;Hauptprogramm
+                     114     PIN                     SEGMENT IDATA           ;Speicher der 4 stelligen PIN
+                     115     ;...Unterprogramme:
+                     116     RXD_HS                  SEGMENT CODE            ;Receive-Data Handshake
+                     117     TXD_HS                  SEGMENT CODE            ;Transmit-Data Handshake
+                     118     TX_PIN                  SEGMENT CODE            ;schreibt PIN in Sendebuffer
+                     119     READ_BUF                SEGMENT CODE            ;Liest Empfamgsbuffer aus
+                     120     RINGMNGR                SEGMENT CODE            ;Ringing Handshake
+                     121     PINMNGR                 SEGMENT CODE            ;PIN-Manager
+                     122     USC_SERV                SEGMENT CODE            ;Service f^r den User
+                     123     EIN_TRIG                SEGMENT CODE            ;Einschalt-Ton - Ansteuerung
+                     124     AUS_TRIG                SEGMENT CODE            ;Ausschalt-Ton - Ansteuerung
+                     125     EXIT_SEQ                SEGMENT CODE            ;Aussiegs-Sequenz
+                     126     ;...Hilfsflags:
+                     127     FLAGS                   SEGMENT BIT             ;Speicherbereich f^r Flags
+                     128     ;
+                     129     ;               Stackreservierung
+----                 130                     RSEG    ?STACK
+0000                 131                     DS      50 
+                     132     ;
+                     133     ;               Reset-Einsprungadresse
+----                 134                     CSEG    AT      RESET
+0000 020000   F      135                     LJMP    INIT
+                     136     ;
+                     137     ;               Timer0: Interrupt-Einsprungsadresse
+----                 138                     CSEG    AT      TIMER0
+000B 020000   F      139                     LJMP    IS_BEG
+                     140     ;
+                     141     ;               Timer1: Interrupt-Einsprungsadresse
+----                 142                     CSEG    AT      TIMER1
+001B 020000   F      143                     LJMP    IS_BEG
+                     144     ;                
+                     145     ;               Externer Interrupt #0: Einsprungsadresse
+----                 146                     CSEG    AT      EXTI0
+0003 020000   F      147                     LJMP    IS_DTMF
+                     148     ;
+                     149     ;               Serial I/O: Interrupt-Einsprungsadresse
+----                 150                     CSEG    AT      SINT
+0023 020000   F      151                     LJMP    IS_BEG
+                     152     ;
+                     153     ;               Speicherplatzreservierung f^r Flags
+----                 154                     RSEG    FLAGS
+0000                 155                     DBIT    20
+                     156     ;
+                     157     ;               Speicherplatzreservierung f^r PIN
+----                 158                     RSEG    PIN     
+0000                 159                     DS      4
+                     160     
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE    4
+
+
+LOC  OBJ            LINE     SOURCE
+
+                     161     ;+++++++++++++++++++++++++ Definitionen -- BEGINN +++++++++++++++++++++++++++;
+                     162     ;
+                     163     ;Symboldefinitionen:
+                     164     ;
+  0000               165     RX_CO_ER        BIT     0                       ;1-> RXD-Kommunikationsfehler 
+  0001               166     QA_STS_A        BIT     1                       ;1-> Quick-Answer aktivieren
+  0002               167     POSRESET        BIT     2                       ;1-> POS-Reset initieren
+  0003               168     SAFECO          BIT     3                       ;1-> Saftey-Cut-Off aktiviert
+  0004               169     SRU             BIT     4                       ;1-> SRU aktiviert
+  0005               170     TX_CO_ER        BIT     5                       ;1-> TXD-Kommunikationsfehler
+  0006               171     RUN_XD_T0       BIT     6                       ;1-> T#0 zur ^bertragung verw.
+  0007               172     RUN_XD_T1       BIT     7                       ;1-> T#1 zur ^bertragung verw.
+  0008               173     CS_Q_REC        BIT     8                       ;1-> Checksum.-Quittung empf.
+  0009               174     NEWUSER         BIT     9                       ;1-> neues User - Login war OK
+  000A               175     DTMF_FL         BIT     10                      ;1-> DTMF-Interrupt ausgel^st           
+  000B               176     PINQ_REC        BIT     11                      ;1-> PIN-Quitt. wurde gesendet
+  000C               177     SVC_ON          BIT     12                      ;1-> Supervisor-Code akitv
+  000D               178     EMC_ON          BIT     13                      ;1-> Emergency-Code akitv
+  000E               179     USC_ON          BIT     14                      ;1-> User-Code akitv
+  000F               180     FLAG16          BIT     15
+  0010               181     FLAG17          BIT     16
+  0011               182     FLAG18          BIT     17
+  0012               183     FLAG19          BIT     18
+  0013               184     FLAG20          BIT     19
+                     185     ;
+                     186     ;Timer2 - Konstanten festlegen:
+  00C8               187     T2CON           DATA    0C8H
+                     188     ;
+  00CF               189     TF2             BIT     0CFH
+  00CE               190     EXF2            BIT     0CEH
+  00CD               191     RCLK            BIT     0CDH
+  00CC               192     TCLK            BIT     0CCH
+  00CB               193     EXEN2           BIT     0CBH
+  00CA               194     TR2             BIT     0CAH
+  00C9               195     C_T2            BIT     0C9H
+  00C8               196     CP_RL2          BIT     0C8H
+                     197     ;
+  00CA               198     RCAP2L          DATA    0CAH
+  00CB               199     RCAP2H          DATA    0CBH
+  00CD               200     TH2             DATA    0CDH
+  00CC               201     TL2             DATA    0CCH
+                     202     ;
+  00AD               203     ET2             BIT     0ADH
+                     204     ;
+                     205     ;Definitionen der Portpins:
+  0097               206     RING            BIT     P1.7
+  0096               207     HOOK            BIT     P1.6
+  0095               208     MF_AUS          BIT     P1.5
+  0094               209     MF_EIN          BIT     P1.4
+  0093               210     REL_CO4         BIT     P1.3 
+  0092               211     REL_CO3         BIT     P1.2
+  0091               212     REL_CO2         BIT     P1.1
+  0090               213     REL_CO1         BIT     P1.0
+                     214     ;
+                     215     ;Definition der Handschake-Konstanten f^r WP2000-Protokoll:
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE    5
+
+
+LOC  OBJ            LINE     SOURCE
+
+  0005               216     RTR             EQU     005H                    ;Ready to Receive     
+  0006               217     ACK             EQU     006H                    ;Acknowlege           
+  0015               218     NACK            EQU     015H                    ;Not Acknowlege       
+  0020               219     RETCO           EQU     020H                    ;Retry Communication  
+                     220     ;
+                     221     ;Definition sonstiger Konstanten f^r das WP2000-Protokoll:
+  0003               222     RETRY_INI       EQU     003D                    ;Retry-Anzahl (Startwert:3)
+  00A0               223     ID_PIN_A        EQU     0A0H                    ;ID f^r PIN-Code-Quittung
+  00D0               224     ID_PIN_D        EQU     0D0H                    ;ID f^r PIN-Code-Transfer
+  00A1               225     ID_PUN_A        EQU     0A1H                    ;ID f. Anfrage der Pick-Up-Nr.
+  00D1               226     ID_PUN_D        EQU     0D1H                    ;ID f^r Daten der Pick-Up-Nr.
+  00A2               227     ID_STS_A        EQU     0A2H                    ;ID f^r Status-Anfrage
+  00D2               228     ID_STS_D        EQU     0D2H                    ;ID f^r Status-Daten
+                     229     ;
+                     230     ;Definition der Adressen komunikationsf^higer Stationen:
+  000A               231     OWN_ADR         EQU     00AH                    ;POI-Adr. (0A-0FH) /1.Station
+  0000               232     POS0_ADR        EQU     000H                    ;POS-Adr. (00-09H) /1.Station
+                     233     ;
+                     234     ;Definition der Konstanten f^r Ring - Manager:
+  0002               235     DEF_PUN         EQU     002D                    ;Default-Wert f^r PUN (=2)
+  0078               236     RPU_TIME        EQU     120D                    ;Zeit f. fremdes Abheben (=6s)
+  0064               237     REACT_TO        EQU     100D                    ;Timeout f. User-Reakt. (=5s)
+                     238     ;
+                     239     ;Definition der Konstanten f^r PIN - Manager:
+  FC00               240     DTMF_DEC        EQU   0FC00H                    ;Adresse des DTMF-Decoders
+  00C8               241     PIN_TO          EQU     200D                    ;Timeout f. PIN-Eingabe (=10s)
+  0014               242     REPLY_TO        EQU      20D                    ;Timeout f. Antw. v. POS (=1s)
+                     243     ;
+                     244     ;Supervisor-Code festlegen:
+  0001               245     SVC1DIG         EQU      01H                    ;1. Digit des SVC
+  0002               246     SVC2DIG         EQU      02H                    ;2. Digit des SVC
+  0002               247     SVC3DIG         EQU      02H                    ;3. Digit des SVC
+  0002               248     SVC4DIG         EQU      02H                    ;4. Digit des SVC
+                     249     ;
+                     250     ;Emergency-Code festlegen:
+  0001               251     EMC1DIG         EQU      01H                    ;1. Digit des EMC
+  0002               252     EMC2DIG         EQU      02H                    ;2. Digit des EMC
+  0001               253     EMC3DIG         EQU      01H                    ;3. Digit des EMC
+  0002               254     EMC4DIG         EQU      02H                    ;4. Digit des EMC
+                     255     ;
+                     256     ;Definition der Konstanten f^r User-Service:
+  00C8               257     KEY_TO          EQU     200D                    ;TO f^r Tastendruck (10s)
+                     258     ;############ DEBUG-Zeile:
+  00C8               259     SKEY_TO         EQU     200D                    ;Timeout f^r Sondertaste (2s)
+                     260     ;
+  00C8               261     OFF_DEL         EQU     200D                    ;Ausschaltverz. x3 /RELCO3
+  00C8               262     ON_DEL          EQU     200D                    ;Einschaltverz^gerung /RELCO3
+                     263     ;
+  000C               264     HESCH           EQU      0CH                    ;#...#00001100b (Sondertaste)
+  000B               265     STERN           EQU      0BH                    ;*...#00001011b 
+  000A               266     NULL            EQU      0AH                    ;0...#00001010b         
+                     267     ;
+                     268     ;Definition der Konstanten f^r Ein - und Ausschaltsignal - Ansteuerung:
+  0011               269     FADE_OUT        EQU      17D                    ;Ausblendzeit f^r ext. Int.
+                     270     ;
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE    6
+
+
+LOC  OBJ            LINE     SOURCE
+
+                     271     ;Makro-Definitionen:
+                     272     ;
+                     273     ;Makroname: T0_INIT(LADEWERT)
+                     274     ;^bergabe-Parameter: LADEWERT
+                     275     ;G^ltigkeitsbereich: ^berall anwendbar
+                     276     ;Funktion:  * l^dt Timer #0 mit dem entsprechenden Ladewert und startet ihn
+                     277     ;Definition:
+                     278     
+                     279     ;
+                     280     ;Makroname: T1_INIT(LADEWERT)
+                     281     ;^bergabe-Parameter: LADEWERT
+                     282     ;G^ltigkeitsbereich: ^berall anwendbar
+                     283     ;Funktion:  * l^dt Timer #1 mit dem entsprechenden Ladewert und startet ihn
+                     284     ;Definition:
+                     285     
+                     286     ;
+                     287     ;Makroname: REGBANK(BANKNR)
+                     288     ;^bergabe-Parameter: BANKNR
+                     289     ;G^ltigkeitsbereich: ^berall anwendbar (speichert Akku-Wert zwischen)
+                     290     ;Funktion:  * schaltet auf angegebene Registerbank um
+                     291     ;Definition:
+                     292     
+                     293     ;
+                     294     ;Makroname: WP2_WRITE(ID,DEST_ADR,DAT0,DAT1,DAT2,DAT3)
+                     295     ;^bergabe-Parameter: ID,DEST_ADR,DAT0,DAT1,DAT2,DAT3
+                     296     ;G^ltigkeitsbereich: ^berall anwendbar 
+                     297     ;Funktion:  * schreibt ^bergebene Werte in den Sendebuffer (Registerbank 2)
+                     298     ;           * l^st das Absenden des Telegramms aus (TI-Interrupt)
+                     299     ;           * falls eine Quick-Answer ansteht wird die empfangene Adresse ge-
+                     300     ;             swaped und das Telegramm mit Handshake zur^ck geschickt
+                     301     ;Definition:
+                     302     
+                     303     ;****************************************************************************;
+                     304     ;Definitionen -- ENDE                                                        ;
+                     305     ;****************************************************************************;
+                     306     ;
+                     307     ;POI - Source-Code:
+                     308     ;
+                     309     ;****************************************************************************;
+----                 310                     RSEG    TX_PIN
+                     311     ;****************************************************************************;
+                     312     ;Einschr^nkungen: nur bei genereller Interruptsperre verwenden (WP2_Write)
+                     313     ;                 verwenden, da R0 und R1 auch in der Int.-Serv. diese
+                     314     ;                 Register verwendet werden
+                     315     ;Funktion:  * Tr^gt die PIN in den Sendebuffer ein
+                     316     ;
+0000 C0E0            317     PIN2BUF:        push    ACC
+0002 C0D0            318                     push    PSW
+                     319     ;
+                     320 +1                  
+0004 C0E0            321 +1                   push   ACC                     ;Akku-Wert sichern
+0006 7401            322 +2                   mov    A, #1
+0008 540B            323 +1                   anl    A, #00000011            ;BankNr. ausmaskieren
+000A C2D4            324 +1                   clr    RS1                     ;Reg.bit 1 r^cksetzen
+000C C2D3            325 +1                   clr    RS0                     ;Reg.bit 0 r^cksetzen
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE    7
+
+
+LOC  OBJ            LINE     SOURCE
+
+000E 23              326 +1                   rl     A                       ;Bits an die richtige Stelle
+000F 23              327 +1                   rl     A                       ;schieben
+0010 23              328 +1                   rl     A
+0011 42D0            329 +1                   orl    PSW, A                  ;Werte ins PSW eintragen
+0013 D0E0            330 +1                   pop    ACC                     ;Akku-Wert zur^ckschreiben
+                     331 +1                  
+0015 7800     F      332                     mov     R0, #PIN-1              ;Adresse des PIN-Speichers -1
+0017 7912            333                     mov     R1, #12H                ;Adresse der Sende-Daten -1
+0019 7C04            334                     mov     R4, #4                  ;4 Zahlen auslesen
+                     335     ;
+001B 08              336     COPY_PIN:       inc     R0                      ;aktuelle Adresse der PIN
+001C 09              337                     inc     R1                      ;aktuelle Adresse der TX-Daten
+001D E6              338                     mov     A, @R0                  ;PIN - Zahl auf die Sendedaten
+001E F7              339                     mov     @R1, A                  ;Register umkopieren
+001F DCFA            340                     djnz    R4, COPY_PIN            ;alles kopieren
+                     341     ;
+0021 D0D0            342                     pop     PSW
+0023 D0E0            343                     pop     ACC
+0025 22              344                     RET
+                     345     ;
+                     346     ;
+                     347     ;****************************************************************************;
+----                 348                     RSEG    READ_BUF
+                     349     ;****************************************************************************;
+                     350     ;Einschr^nkungen: Darf nur aus Interruptservice-Routine angesprungen werden,
+                     351     ;                 da erst nach Empfang ausgelesen werden darf (RI -> Int.)
+                     352     ;Funktion:  * liest den Empfangsframebuffer (Registerbank Nr.3) aus
+                     353     ;           * packt das Telegramm aus; kopiert Werte in entsprechende Register
+                     354     ;           * leitet je nach ID eine Schnellantwort ein   
+                     355     ;
+0000 C0E0            356     WP2_READ:       push    ACC                     ;Akku-Wert sichern
+0002 C0D0            357                     push    PSW                     ;PSW (Reg.Bank) sichern
+                     358 +1                  
+0004 C0E0            359 +1                   push   ACC                     ;Akku-Wert sichern
+0006 7403            360 +2                   mov    A, #3
+0008 540B            361 +1                   anl    A, #00000011            ;BankNr. ausmaskieren
+000A C2D4            362 +1                   clr    RS1                     ;Reg.bit 1 r^cksetzen
+000C C2D3            363 +1                   clr    RS0                     ;Reg.bit 0 r^cksetzen
+000E 23              364 +1                   rl     A                       ;Bits an die richtige Stelle
+000F 23              365 +1                   rl     A                       ;schieben
+0010 23              366 +1                   rl     A
+0011 42D0            367 +1                   orl    PSW, A                  ;Werte ins PSW eintragen
+0013 D0E0            368 +1                   pop    ACC                     ;Akku-Wert zur^ckschreiben
+                     369 +1                                       ;...Zieladresse auswerten:
+0015 E9              370                     mov     A, R1
+0016 54F0            371                     anl     A, #11110000b           ;src-Adr. ausmaskieren
+0018 C4              372                     SWAP    A                       ;Nibbles tauschen
+                     373     ;
+0019 B40A25          374                     cjne    A, #OWN_ADR, READ_END   ;richtig adressiert?
+                     375     ;                                               ;...ID auswerten
+001C B8D103          376                     cjne    R0, #ID_PUN_D, STATUS   ;wurden PUN-Daten geschickt?
+001F EB              377                     mov     A, R3                   ;PUN heraus kopieren
+0020 F500            378                     mov     00H, A                  ;PUN in R0 /RB0 kopieren
+                     379     ;
+0022 C201            380     STATUS:         clr     QA_STS_A
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE    8
+
+
+LOC  OBJ            LINE     SOURCE
+
+0024 B8A205          381                     cjne    R0, #ID_STS_A, PIN_QUIT ;wurde der Status angefragt?
+0027 D201            382                     setb    QA_STS_A                ;Schnell-Antwort auf Status- 
+0029 020000   F      383                     jmp     READ_END
+                     384     ;
+002C B8D012          385     PIN_QUIT:       cjne    R0, #ID_PIN_D, READ_END ;wurde PIN-Quittung geschickt?
+002F D20B            386                     setb    PINQ_REC                ;PIN-Quittung wurde empfangen
+0031 EA              387                     mov     A, R2                   ;Status-Reg. in Akku laden
+0032 5480            388                     anl     A, #10000000b           ;(Phone-Line-Cond.) ausmask.
+0034 23              389                     RL      A                       ;BIT7 -> BIT0 
+0035 B40003          390                     cjne    A, #0, HANG_UP          ;falsche PIN -> auflegen!
+0038 020000   F      391                     jmp     READ_END                ;richtige PIN -> alles OK!
+                     392     ;
+003B 120000   F      393     HANG_UP:        call    LOGOUT                  ;Ausstiegs-Sequenz einleiten
+003E 020000   F      394                     jmp     READ_END
+                     395     ;
+0041 D0D0            396     READ_END:       pop     PSW                     ;PSW zur^ckschreiben
+0043 D0E0            397                     pop     ACC                     ;Akku-Wert zur^ckschreiben
+                     398     ;
+0045 22              399                     RET
+                     400     ;
+                     401     ;
+                     402     ;****************************************************************************;
+----                 403                     RSEG RXD_HS                     ;RXD-Frame Handshake
+                     404     ;****************************************************************************;
+                     405     ;Einschr^nkungen: Darf nur aus Interruptservice-Routine angesprungen werden,
+                     406     ;                 da es Int. Kennzeichnungsflags abfragt !!!
+                     407     ;Funktion:  * ^bernimmt das Empfangs-Handshake zur Gegenstation
+                     408     ;           * schreibt empfangene Bytes mittels indirekter Adressierung
+                     409     ;             in den Empfangsbuffer (Registerbank #3)
+                     410     ;           * als Adressen-Speicher dient R0 der Registerbank 1
+                     411     ;           * steht kein Timer f^r den Ablauf zur Verf^gung wird ein Kom-
+                     412     ;             munikations-Error ausgel^st.
+                     413     ;           * Timeout ^ber Teilframe-Empfang zur Verbindungs^berwachung
+                     414     ;           * ^berpr^ft die Checksumme und meldet gegebenenfalls einen Fehler
+                     415     ;             in Form eines RETCO 
+                     416     ;           * daraufhin wird bis zu dreimal ein erneuter Empfang zugelassen;
+                     417     ;             ist nach dem dritten mal keine g^ltige Checksumme empfangen
+                     418     ;             worden wird ein NACK gesendet
+                     419     ;
+                     420 +1  RXD_FRAME:      
+0000 C0E0            421 +1                   push   ACC                     ;Akku-Wert sichern
+0002 7401            422 +2                   mov    A, #1
+0004 540B            423 +1                   anl    A, #00000011            ;BankNr. ausmaskieren
+0006 C2D4            424 +1                   clr    RS1                     ;Reg.bit 1 r^cksetzen
+0008 C2D3            425 +1                   clr    RS0                     ;Reg.bit 0 r^cksetzen
+000A 23              426 +1                   rl     A                       ;Bits an die richtige Stelle
+000B 23              427 +1                   rl     A                       ;schieben
+000C 23              428 +1                   rl     A
+000D 42D0            429 +1                   orl    PSW, A                  ;Werte ins PSW eintragen
+000F D0E0            430 +1                   pop    ACC                     ;Akku-Wert zur^ckschreiben
+                     431 +1                  
+0011 C0E0            432                     push    ACC                     ;Akku-Wert sichern
+0013 C0D0            433                     push    PSW                     ;PSW (Reg.Bank) sichern
+0015 E599            434                     mov     A, SBUF                 ;^berpr^fen ob Kommunikations
+0017 B40518          435                     cjne    A, #RTR, COKORX         ;Anfrage vorliegt; sonst ERROR
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE    9
+
+
+LOC  OBJ            LINE     SOURCE
+
+                     436     ;
+001A 208C03          437                     jb      TR0, EV_RX_T1           ;Timer-Busy-Check! (ev. T#1)
+001D 020000   F      438                     jmp     RXD_OK                  ;1 Timer frei -> alles OK !
+0020 208E0F          439     EV_RX_T1:       jb      TR1, COKORX             ;Timer1 auch busy -> Error!
+                     440     ;
+0023 C299            441     RXD_OK:         clr     TI                      
+0025 759906          442                     mov     SBUF, #ACK              ;empfangsbereit !
+0028 3099FD          443                     jnb     TI, $                   ;warten bis fertig gesendet
+002B 7817            444                     mov     R0, #17H                ;Startadr. in R0 laden
+002D 7908            445                     mov     R1, #8                  ;Anz. der Teilframes festlegen
+002F 020000   F      446                     jmp     RX_READY
+0032 020000   F      447     COKORX:         jmp     CO_KO_RX                ;Kommunikationsfehler
+                     448     ;
+0035 208C15          449     RX_READY:       jb      TR0, TAKE_T1R           ;T#0-Busy-Check; ->Timer #1
+                     450 +1                  
+0038 C28C            451 +1                  clr     TR0
+003A C28D            452 +1                  clr     TF0
+003C 758C02          453 +2                  mov     TH0,  #HIGH(-65000)  ;T#0 mit LADEWERT laden
+003F 758A18          454 +2                  mov     TL0,  #LOW (-65000)  ;T#0 mit LADEWERT laden
+0042 D28C            455 +1                  setb    TR0
+                     456 +1                 
+0044 D206            457                     setb    RUN_XD_T0               ;T#0 f^r ^bertragung genommen
+0046 C207            458                     clr     RUN_XD_T1               ;sicher nicht Timer #1
+0048 C298            459                     clr     RI
+                     460     ;
+004A 020000   F      461                     jmp     RXD_FRM
+                     462     ;
+004D 208E64          463     TAKE_T1R:       jb      TR1, CO_KO_RX           ;T#1-Busy-Check; ->CO_KO_RX
+                     464 +1                  
+0050 C28E            465 +1                  clr     TR1
+0052 C28F            466 +1                  clr     TF1
+0054 758D02          467 +2                  mov     TH1,  #HIGH(-65000)  ;T#1 mit LADEWERT laden
+0057 758B18          468 +2                  mov     TL1,  #LOW (-65000)  ;T#1 mit LADEWERT laden
+005A D28E            469 +1                  setb    TR1
+                     470 +1                 
+005C D207            471                     setb    RUN_XD_T1               ;T#1 f^r ^bertragung genommen
+005E C206            472                     clr     RUN_XD_T0               ;sicher nicht Timer #0
+0060 C298            473                     clr     RI                      ;RXD-Kennzeichnungsbit l^schen
+                     474     ;
+0062 209817          475     RXD_FRM:        jb      RI,  REC_FRM            ;Teilframe empfangen ?
+0065 20070A          476                     jb      RUN_XD_T1, ALSO_T1R     ;Auswahlabfrage: T#0/T#1
+                     477     ;
+0068 308DF7          478                     jnb     TF0, RXD_FRM            ;T#0 abfragen, wenn dieser
+006B C28C            479                     clr     TR0                     ;gew^hlt wurde; Timer stoppen
+006D C206            480                     clr     RUN_XD_T0
+006F 020000   F      481                     jmp     CO_KO_RX                ;-> Kommunikationsfehler
+                     482     ;
+0072 308FED          483     ALSO_T1R:       jnb     TF1, RXD_FRM            ;T#1 abfragen, wenn dieser
+0075 C28E            484                     clr     TR1                     ;gew^hlt wurde; Timer stoppen
+0077 C207            485                     clr     RUN_XD_T1               ;
+0079 020000   F      486                     jmp     CO_KO_RX                ;-> Kommunikations-Fehler
+                     487     ;
+007C C298            488     REC_FRM:        clr     RI                      ;RXD-Kennzeichnungsbit l^schen
+007E 300605          489                     jnb     RUN_XD_T0, ERGO_T1R     ;Auswahlabfrage T#0/T#1
+                     490     ;
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE   10
+
+
+LOC  OBJ            LINE     SOURCE
+
+0081 C28C            491                     clr     TR0                     ;T#0 wurde benutzt -> stoppen
+                     492     ;
+0083 020000   F      493                     jmp     RECEIVE
+                     494     ;
+0086 C28E            495     ERGO_T1R:       clr     TR1                     ;T#1 wurde benutzt -> stoppen
+                     496     ;
+0088 08              497     RECEIVE:        inc     R0                      ;Adresse des aktuellen Reg.
+0089 A699            498                     mov     @R0, SBUF               ;Wert in aktuelles Register 
+008B B9010F          499                     cjne    R1, #1, NO_RX_CS        ;Kontrolle ob Checksumme empf.
+                     500     ;
+                     501                                                     ;Checksumme empfangen !
+008E 7817            502                     mov     R0, #17H                ;Adresse in R0
+0090 7907            503                     mov     R1, #7                  ;Checksumme ^ber 7 Bytes
+0092 E4              504                     clr     A                       ;Akku auf Null setzen (CHKSM)!
+0093 08              505     RX_CHKSM:       inc     R0                      ;R0-R7 der RB3 adressieren
+0094 26              506                     add     A, @R0                  ;Checksumme ^ber alle Teil-
+0095 D9FC            507                     djnz    R1, RX_CHKSM            ;Frames (7) berechnen
+                     508     ;
+0097 B51F06          509                     cjne    A, 1FH, GO2RETRY        ;Checksumme mit R7 /RB3 vergl.
+009A 020000   F      510                     jmp     CO_OK_RX                ;Checksumme in Ordnung
+                     511     ;
+009D 19              512     NO_RX_CS:       dec     R1                      ;alle Teilframes auslesen
+009E 8095            513                     jmp     RX_READY
+                     514     ;
+00A0 DA05            515     GO2RETRY:       djnz    R2, RETRY_CO            ;Retrys abgelaufen ? 
+00A2 7A03            516                     mov     R2, #RETRY_INI          ;Retry-Wert neu laden
+00A4 020000   F      517                     jmp     CO_KO_RX                ;kein Retry mehr -> Fehler!
+                     518     ;
+00A7 C299            519     RETRY_CO:       clr     TI
+00A9 759920          520                     mov     SBUF, #RETCO            ;RETRY senden bei inv. Chksum
+00AC 3099FD          521                     jnb     TI, $ 
+00AF D200            522                     setb    RX_CO_ER                ;Kommunikationsfehler (kein
+00B1 020000   F      523                     jmp     RXD_END                 ;Auslesen erlaubt!)
+                     524     ;
+00B4 D200            525     CO_KO_RX:       setb    RX_CO_ER                ;Kommunikationsfehler /Empfang
+00B6 C299            526                     clr     TI
+00B8 759915          527                     mov     SBUF, #NACK             ;Komm. Fehler melden
+00BB 3099FD          528                     jnb     TI, $
+00BE 020000   F      529                     jmp     RXD_END
+                     530     ;
+00C1 C200            531     CO_OK_RX:       clr     RX_CO_ER                ;kein Kommunikationsfehler
+00C3 7A03            532                     mov     R2, #RETRY_INI          ;wieder Startwert laden
+00C5 C299            533                     clr     TI                      ;
+00C7 759906          534                     mov     SBUF, #ACK              ;^bertragunng OK (Checksumme)
+00CA 3099FD          535                     jnb     TI, $
+                     536     ;
+                     537                     ;50ms Verz^gerung notwendig um unmittelbar gesendetes Zeichen 
+                     538                     ;nicht in gleichen Empf.buffer zu schreiben (Schnellantwort)
+                     539     ;
+00CD 208C14          540                     jb      TR0, DELY_T1R           ;T#0-Busy-Check; ->Timer #1
+                     541 +1                  
+00D0 C28C            542 +1                  clr     TR0
+00D2 C28D            543 +1                  clr     TF0
+00D4 758C02          544 +2                  mov     TH0,  #HIGH(-65000)  ;T#0 mit LADEWERT laden
+00D7 758A18          545 +2                  mov     TL0,  #LOW (-65000)  ;T#0 mit LADEWERT laden
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE   11
+
+
+LOC  OBJ            LINE     SOURCE
+
+00DA D28C            546 +1                  setb    TR0
+                     547 +1                 
+                     548     ;
+00DC 308DFD          549                     jnb     TF0, $                  ;warten bis Zeit abgelaufen
+00DF C28C            550                     clr     TR0                     ;Timer #0 stoppen
+                     551     ;
+00E1 020000   F      552                     jmp     RXD_END  
+                     553     ;
+                     554 +1  DELY_T1R:       
+00E4 C28E            555 +1                  clr     TR1
+00E6 C28F            556 +1                  clr     TF1
+00E8 758D02          557 +2                  mov     TH1,  #HIGH(-65000)  ;T#1 mit LADEWERT laden
+00EB 758B18          558 +2                  mov     TL1,  #LOW (-65000)  ;T#1 mit LADEWERT laden
+00EE D28E            559 +1                  setb    TR1
+                     560 +1                                 ;wenn ACK mind. 1 Timer frei !
+                     561     ;
+00F0 308FFD          562                     jnb     TF1, $                  ;warten bis Zeit abgelaufen
+00F3 C28E            563                     clr     TR1                     ;Timer #1 stoppen
+                     564     ;
+00F5 D0D0            565     RXD_END:        pop     PSW                     ;PSW (Reg.Bank) zur^ckschr.
+00F7 D0E0            566                     pop     ACC                     ;Akku-Wert zur^ckschreiben
+00F9 22              567                     RET
+                     568     ;
+                     569     ;
+                     570     ;****************************************************************************;
+----                 571                     RSEG TXD_HS                     ;TXD-Frame Handshake
+                     572     ;****************************************************************************;
+                     573     ;Einschr^nkungen: Darf nur aus Interruptservice-Routine angesprungen werden,
+                     574     ;                 da es Int. Kennzeichnungsflags abfragt !!!
+                     575     ;Funktion:  * ^bernimmt das Sende-Handshake zur Gegenstation
+                     576     ;           * liest zu sendende Bytes mittels indirekter Adressierung
+                     577     ;             aus dem Sendebuffer (Registerbank #2) aus
+                     578     ;           * als Adressen-Speicher dient R0 der Registerbank 1
+                     579     ;           * steht kein Timer f^r den Ablauf zur Verf^gung wird ein Komm-
+                     580     ;             unikations-Error ausgel^st.
+                     581     ;           * es wird die Checksumme generiert
+                     582     ;           * Timeout ^ber Empfang der Checksummen-Quittung
+                     583     ;           * wird ein RETCO empfangen wird der gesamte Frame noch
+                     584     ;             einmal gesendet
+                     585     ;
+0000 C0E0            586     TXD_FRAME:      push    ACC                     ;Akku-Wert sichern
+0002 C0D0            587                     push    PSW                     ;PSW (Reg.Bank) sichern
+                     588 +1                  
+0004 C0E0            589 +1                   push   ACC                     ;Akku-Wert sichern
+0006 7401            590 +2                   mov    A, #1
+0008 540B            591 +1                   anl    A, #00000011            ;BankNr. ausmaskieren
+000A C2D4            592 +1                   clr    RS1                     ;Reg.bit 1 r^cksetzen
+000C C2D3            593 +1                   clr    RS0                     ;Reg.bit 0 r^cksetzen
+000E 23              594 +1                   rl     A                       ;Bits an die richtige Stelle
+000F 23              595 +1                   rl     A                       ;schieben
+0010 23              596 +1                   rl     A
+0011 42D0            597 +1                   orl    PSW, A                  ;Werte ins PSW eintragen
+0013 D0E0            598 +1                   pop    ACC                     ;Akku-Wert zur^ckschreiben
+                     599 +1                  
+0015 780F            600                     mov     R0, #0FH                ;Startadr. f^r Berechnung
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE   12
+
+
+LOC  OBJ            LINE     SOURCE
+
+0017 7907            601                     mov     R1, #7                  ;Checksumme ^ber 7 Byte
+0019 E4              602                     clr     A                       ;Akku l^schen f^r Addition
+001A 08              603     CALC_CS:        inc     R0                      ;Teilframe -Adresse
+001B 26              604                     add     A, @R0                  ;Teilframes aufaddieren
+001C D9FC            605                     djnz    R1, CALC_CS             ;Checksumme fertig !
+001E F517            606                     mov     17H, A                  ;Checksumme kopieren...
+                     607     ;
+0020 780F            608                     mov     R0, #0FH                ;Startadr. f^r Sendenbuffer
+0022 7908            609                     mov     R1, #8                  ;8 Teilframes senden
+                     610     ;
+0024 208C03          611                     jb      TR0, EV_TX_T1           ;Timer-Busy-Check! (ev. T#1)
+0027 020000   F      612                     jmp     TXD_OK                  ;1 Timer frei -> alles OK !
+002A 208E0B          613     EV_TX_T1:       jb      TR1, COKOTX             ;Timer1 auch busy -> Error!
+                     614     ;
+002D C299            615     TXD_OK:         clr     TI
+002F 759905          616                     mov     SBUF, #RTR              ;RTR senden
+0032 3099FD          617                     jnb     TI, $ 
+0035 020000   F      618                     jmp     RTRCS_TO                ;Anforderung einer TO-Abfrage
+                     619     ;
+0038 020000   F      620     COKOTX:         jmp     CO_KO_TX                
+                     621     ;
+003B C299            622     FRM_SEND:       clr     TI
+003D 08              623                     inc     R0                      ;auf aktuelles Reg. zeigen
+003E 8699            624                     mov     SBUF, @R0               ;aktuelles Reg. senden
+0040 3099FD          625                     jnb     TI, $                   ;warten bis Byte gesendet
+0043 D9F6            626                     djnz    R1, FRM_SEND            ;Checksumme gesendet ?
+                     627     ;                
+0045 D208            628                     setb    CS_Q_REC                ;CS-Quittung wird erwartet
+                     629     ;
+                     630     ;                                               ;Timeout-Abfrage
+0047 208C15          631     RTRCS_TO:       jb      TR0, TAKE_T1T           ;Timer#0-Busy-Check; sonst T#1
+                     632 +1                  
+004A C28C            633 +1                  clr     TR0
+004C C28D            634 +1                  clr     TF0
+004E 758C02          635 +2                  mov     TH0,  #HIGH(-65000)  ;T#0 mit LADEWERT laden
+0051 758A18          636 +2                  mov     TL0,  #LOW (-65000)  ;T#0 mit LADEWERT laden
+0054 D28C            637 +1                  setb    TR0
+                     638 +1                                 ;50ms Timeout f^r ID-Empfang
+0056 D206            639                     setb    RUN_XD_T0               ;T#0 f^r ^bertragung genommen
+0058 C207            640                     clr     RUN_XD_T1               ;Timer #1 sicher nicht
+005A C298            641                     clr     RI                      ;RXD-Kennzeichnungsbit l^schen
+                     642     ;
+005C 020000   F      643                     jmp     TXD_FRM
+                     644     ;
+005F 208E5C          645     TAKE_T1T:       jb      TR1, CO_KO_TX           ;T#1-Busy-Check; ->CO_KO_TX
+                     646 +1                  
+0062 C28E            647 +1                  clr     TR1
+0064 C28F            648 +1                  clr     TF1
+0066 758D02          649 +2                  mov     TH1,  #HIGH(-65000)  ;T#1 mit LADEWERT laden
+0069 758B18          650 +2                  mov     TL1,  #LOW (-65000)  ;T#1 mit LADEWERT laden
+006C D28E            651 +1                  setb    TR1
+                     652 +1                 
+006E D207            653                     setb    RUN_XD_T1               ;T#1 f^r ^bertragung genommen
+0070 C206            654                     clr     RUN_XD_T0               ;Timer #0 sicher nicht
+0072 C298            655                     clr     RI                      ;RXD-Kennzeichnungsbit l^schen
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE   13
+
+
+LOC  OBJ            LINE     SOURCE
+
+                     656     ;
+0074 209817          657     TXD_FRM:        jb      RI,  TRA_FRM            ;Sendefreigabe erhalten ?
+0077 30060A          658                     jnb     RUN_XD_T0, ALSO_T1T     ;Auswertentscheidung: T#0/T#1 
+                     659     ;                                                
+007A 308DF7          660                     jnb     TF0, TXD_FRM            ;T#0 abfragen, wenn dieser
+007D C28C            661                     clr     TR0                     ;gew^hlt wurde
+007F C206            662                     clr     RUN_XD_T0
+0081 020000   F      663                     jmp     CO_KO_TX                ;-> Kommunikationsfehler
+                     664     ;
+0084 308FED          665     ALSO_T1T:       jnb     TF1, TXD_FRM            ;T#1 abfragen, wenn dieser
+0087 C28E            666                     clr     TR1                     ;gew^hlt wurde
+0089 C207            667                     clr     RUN_XD_T1               ;
+008B 020000   F      668                     jmp     CO_KO_TX                ;-> Kommunikations-Fehler
+                     669     ;
+008E C298            670     TRA_FRM:        clr     RI                      ;RXD-Kennzeichnungsbit l^schen
+0090 300605          671                     jnb     RUN_XD_T0, ERGO_T1T     ;Auswahlabfrage T#0/T#1
+                     672     ;
+0093 C28C            673                     clr     TR0                     ;T#0 wurde benutzt
+                     674     ;
+0095 020000   F      675                     jmp     SEND
+                     676     ;
+0098 C28E            677     ERGO_T1T:       clr     TR1                     ;T#1 wurde benutzt
+                     678     ;
+009A E599            679     SEND:           mov     A, SBUF                 ;empf. Zeichen aus SBUF holen
+009C 200805          680                     jb      CS_Q_REC, TX_CHKSM      ;Checksummen-Quittung empf.
+                     681                                                     ;also RTR-Quittung empfangen
+009F B4061C          682                     cjne    A, #ACK, CO_KO_TX       ;wurde ein ACK empfangen ?
+00A2 8097            683                     jmp     FRM_SEND                ;Frame senden starten
+                     684     ;
+                     685                                                     ;...Checksumme empfangen
+00A4 C208            686     TX_CHKSM:       clr     CS_Q_REC                  
+00A6 B40603          687                     cjne    A, #ACK, REC_RETCO      ;Checksumme korrekt ?
+00A9 020000   F      688                     jmp     CO_OK_TX                ;alles in Ordnung !
+                     689     ;
+00AC B4200F          690     REC_RETCO:      cjne    A, #RETCO, CO_KO_TX     ;Retry-Auftrag erhalten ?
+00AF DB05            691                     djnz    R3, TXDFRAME            ;ges. ^bertragung wiederholen
+00B1 AB03            692                     mov     R3, RETRY_INI           ;Retry-Zahl resitieren
+00B3 020000   F      693                     jmp     CO_KO_TX                ;Komm. Fehler da Retrys vorbei
+                     694     ;
+00B6 020000   F      695     TXDFRAME:       jmp     TXD_FRAME
+                     696     ;
+00B9 C205            697     CO_OK_TX:       clr     TX_CO_ER                ;Komm.-Fehlerbit l^schen
+00BB 020000   F      698                     jmp     TXD_END
+                     699     ;
+00BE D205            700     CO_KO_TX:       setb    TX_CO_ER                ;Komm.-Fehler aufgetreten
+00C0 020000   F      701                     jmp     TXD_END 
+                     702     ;
+                     703     ;
+00C3 D0D0            704     TXD_END:        pop     PSW                     ;PSW (Reg.Bank) zur^ckschr.
+00C5 D0E0            705                     pop     ACC                     ;Akku-Wert zur^ckschreiben
+00C7 22              706                     RET
+                     707     ;
+                     708     ;
+                     709     ;****************************************************************************;
+----                 710                     RSEG RINGMNGR                   ;Ring-Schnittstellen - Manager
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE   14
+
+
+LOC  OBJ            LINE     SOURCE
+
+                     711     ;****************************************************************************;
+                     712     ;Einschr^nkungen: keine
+                     713     ;Funktion:  * manipuliert den Akku-Inhalt
+                     714     ;           * ^bernimmt das Handshake zur Amtsleitung
+                     715     ;
+                     716     ; 1 __    __    __    __    ______________________    __    __    __    ____  
+                     717     ; 0   |__|  |__|  |__|  |__|                      |__|  |__|  |__|  |__|      
+                     718     ;     |                    |                      |                    |      
+                     719     ;     |     1x l^uten      |    Pause (>65ms)     |     1x l^uten      |      
+                     720     ;     |<------------------>|<-------------------->|<------------------>|      
+                     721     ;                                                                             
+                     722     ;           * fordert aktuelle PUN von POS an; keine Antwort: Default-PUN
+                     723     ;           * ein Abheben einer anderen Nebenstelle wird dadurch erkannt, daa
+                     724     ;             ein Timout vor Erreichen der PUN anspricht
+                     725     ;           * nach dem Abheben mua innerhalb eines weiteren Timouts ein DTMF-
+                     726     ;             Ton erkannt werden. Andernfalls legt das POI wieder auf
+                     727     ;           * wird ein DTMF-Ton erkannt wird dieser bereits an den PINMNGR
+                     728     ;             weiter geleitet
+                     729     ;
+                     730 +1  RINGING:        
+0000 C0E0            731 +1                   push   ACC                     ;Akku-Wert sichern
+0002 7400            732 +2                   mov    A, #0
+0004 540B            733 +1                   anl    A, #00000011            ;BankNr. ausmaskieren
+0006 C2D4            734 +1                   clr    RS1                     ;Reg.bit 1 r^cksetzen
+0008 C2D3            735 +1                   clr    RS0                     ;Reg.bit 0 r^cksetzen
+000A 23              736 +1                   rl     A                       ;Bits an die richtige Stelle
+000B 23              737 +1                   rl     A                       ;schieben
+000C 23              738 +1                   rl     A
+000D 42D0            739 +1                   orl    PSW, A                  ;Werte ins PSW eintragen
+000F D0E0            740 +1                   pop    ACC                     ;Akku-Wert zur^ckschreiben
+                     741 +1                                       ;Registerbank 0 w^hlen
+                     742     ;
+                     743                     ;...PUN anfordern: Antwort kommt sicher vor ersten "dec R0"
+                     744 +1                  
+0011 C0E0            745 +1                   push   ACC                     ;Akku-Wert sichern
+0013 7400            746 +2                   mov    A, #0
+0015 540B            747 +1                   anl    A, #00000011            ;BankNr. ausmaskieren
+0017 C2D4            748 +1                   clr    RS1                     ;Reg.bit 1 r^cksetzen
+0019 C2D3            749 +1                   clr    RS0                     ;Reg.bit 0 r^cksetzen
+001B 23              750 +1                   rl     A                       ;Bits an die richtige Stelle
+001C 23              751 +1                   rl     A                       ;schieben
+001D 23              752 +1                   rl     A
+001E 42D0            753 +1                   orl    PSW, A                  ;Werte ins PSW eintragen
+0020 D0E0            754 +1                   pop    ACC                     ;Akku-Wert zur^ckschreiben
+                     755 +1                  
+0022 7802            756                     mov     R0, #DEF_PUN            ;Default-Wert der PUN zuweisen
+                     757 +1                  
+0024 C2AC            758 +1                  clr     ES                      ;Sende-Interrupt temp. sperren
+0026 C0E0            759 +1                  push    ACC                     ;Akku-Wert sichern
+0028 C0D0            760 +1                  push    PSW                     ;PSW (Reg.Bank) sichern
+                     761 +2                  
+002A C0E0            762 +2                   push   ACC                     ;Akku-Wert sichern
+002C 7402            763 +3                   mov    A, #2
+002E 540B            764 +2                   anl    A, #00000011            ;BankNr. ausmaskieren
+0030 C2D4            765 +2                   clr    RS1                     ;Reg.bit 1 r^cksetzen
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE   15
+
+
+LOC  OBJ            LINE     SOURCE
+
+0032 C2D3            766 +2                   clr    RS0                     ;Reg.bit 0 r^cksetzen
+0034 23              767 +2                   rl     A                       ;Bits an die richtige Stelle
+0035 23              768 +2                   rl     A                       ;schieben
+0036 23              769 +2                   rl     A
+0037 42D0            770 +2                   orl    PSW, A                  ;Werte ins PSW eintragen
+0039 D0E0            771 +2                   pop    ACC                     ;Akku-Wert zur^ckschreiben
+                     772 +2                                       ;Sendebuffer w^hlen
+003B 78A1            773 +2                  mov     R0, #ID_PUN_A                ;ID in Sendebuffer schreiben
+                     774 +1  ;
+003D 300107          775 +2                  jnb     QA_STS_A, USER_ADR00     ;keine QA -> ^bergebene Adr.
+0040 E519            776 +1                  mov     A, 19H                  ;empfanges Adr.Reg. auswerten
+0042 C4              777 +1                  SWAP    A                       ;dest. und src. Adr. tauschen
+0043 F9              778 +1                  mov     R1, A                   ;Adr. in Sendebuffer speichern
+0044 020000   F      779 +2                  jmp     STATUS02                 ;
+                     780 +1  ;
+0047 E4              781 +2       USER_ADR00: clr     A
+0048 F9              782 +1                  mov     R1, A                   ;alte Adr. l^schen
+0049 740A            783 +1                  mov     A, #OWN_ADR             ;Source Adresse laden (ins LB)
+004B 540F            784 +1                  anl     A, #00001111b           ;
+004D F9              785 +1                  mov     R1, A
+004E 7400            786 +2                  mov     A, # POS0_ADR           ;Dest. Adresse laden (ins HB)
+0050 540F            787 +1                  anl     A, #00001111b           ;
+0052 C4              788 +1                  SWAP    A
+0053 49              789 +1                  orl     A, R1                   
+0054 F9              790 +1                  mov     R1, A                   ;fertige Adresse
+                     791 +1  ;
+0055 E4              792 +2         STATUS02: clr     A                       
+0056 E590            793 +1                  mov     A, P1                   ;Phone-Line-Condition (P1.6)
+0058 5440            794 +1                  anl     A, #01000000b           ;P1.6 ausmaskieren
+005A 23              795 +1                  rl      A                       ;um eins nach links schieben
+                     796 +1  ;
+005B 100205          797 +2                  jbc     POSRESET, PR_EXEC04      ;POS-Reset-Auftrag eintragen
+005E 54BF            798 +1                  anl     A, #10111111b           ;A hat den Wert von R2
+0060 020000   F      799 +2                  jmp     SAFE_CO06                ;zum n^chsten Punkt                
+0063 4440            800 +2        PR_EXEC04: orl     A, #01000000b           ;A hat den Wert von R2
+                     801 +1  ;
+0065 200305          802 +2        SAFE_CO06: jb      SAFECO, SCO_EXEC08       ;Saftey-Cut-Off eintragen
+0068 54DF            803 +1                  anl     A, #11011111b           ;A hat den Wert von R2
+006A 020000   F      804 +2                  jmp     SRU?0A                   ;zum n^chsten Punkt
+006D 4420            805 +2       SCO_EXEC08: orl     A, #00100000b           ;A hat den Wert von R2
+                     806 +1  ;
+006F 200405          807 +2           SRU?0A: jb      SRU, SRU_EXEC0C          ;SRU-Aktivierung eintragen
+0072 54EF            808 +1                  anl     A, #11101111b           ;A hat den Wert von R2
+0074 020000   F      809 +2                  jmp     RELCO0E                  ;zum n^chsten Punkt
+0077 4410            810 +2       SRU_EXEC0C: orl     A, #00010000b          
+                     811 +1  ;
+0079 FA              812 +2          RELCO0E: mov     R2, A                   ;Status-Reg. beschreiben
+007A E590            813 +1                  mov     A, P1                   ;RELCO-Zust^nde eintragen
+007C 540F            814 +1                  anl     A, #00001111b           ;restliche Pins ausmaskieren
+007E 4212            815 +1                  orl     12H, A                  ;Zust^nde ins Stat. Reg. /TXD
+                     816 +1  ;                                               ;(Registerbank 2)
+0080 B8A006          817 +2                  cjne    R0, #ID_PIN_A, USERDATA10
+                     818 +1  
+                     819 +1                  ;umkopieren der PIN in die Datenregister des Sendebuffers
+0083 120000   F      820 +1                  call    PIN2BUF                 ;PIN in Daten-Buffer schreiben
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE   16
+
+
+LOC  OBJ            LINE     SOURCE
+
+                     821 +1  
+0086 020000   F      822 +2                  jmp     WRITEEND12
+                     823 +1  
+0089 7B00            824 +2       USERDATA10: mov     R3, # 0              ;kopieren der ^bergebenen
+008B 7C00            825 +2                  mov     R4, # 0              ;Daten in den Sendeframe
+008D 7D00            826 +2                  mov     R5, # 0
+008F 7E00            827 +2                  mov     R6, # 0
+                     828 +1  ;
+0091 D0D0            829 +2       WRITEEND12: pop     PSW                     ;PSW zur^ckschreiben
+0093 D0E0            830 +1                  pop     ACC                     ;Akku-Wert zur^ckschreiben
+0095 D2AC            831 +1                  setb    ES                      ;Sende-Interrupt wieder freig.
+0097 D299            832 +1                  setb    TI                      ;Frame senden ausl^sen
+                     833 +1                 
+                     834     ;
+0099 7914            835                     mov     R1, #20                 ;Warten auf PUN - Daten
+                     836 +1  WAIT4PUN:       
+009B C28C            837 +1                  clr     TR0
+009D C28D            838 +1                  clr     TF0
+009F 758C3C          839 +2                  mov     TH0,  #HIGH(-50000)  ;T#0 mit LADEWERT laden
+00A2 758AB0          840 +2                  mov     TL0,  #LOW (-50000)  ;T#0 mit LADEWERT laden
+00A5 D28C            841 +1                  setb    TR0
+                     842 +1                                 ;1s - Timeout
+00A7 308DFD          843                     jnb     TF0, $
+00AA D9EF            844                     djnz    R1, WAIT4PUN
+                     845     ;
+                     846     ;-------------------------- L^ut-Auswertung /BEGINN --------------------------
+                     847 +1  RESETTIM:       
+00AC C28C            848 +1                  clr     TR0
+00AE C28D            849 +1                  clr     TF0
+00B0 758C3C          850 +2                  mov     TH0,  #HIGH(-50000)  ;T#0 mit LADEWERT laden
+00B3 758AB0          851 +2                  mov     TL0,  #LOW (-50000)  ;T#0 mit LADEWERT laden
+00B6 D28C            852 +1                  setb    TR0
+                     853 +1                                 ;Timout-Timer starten
+00B8 7978            854                     mov     R1, #RPU_TIME           ;Default-Zeit f^r fremdes Abh.
+00BA 3097EF          855     RUFTON:         jnb     RING, RESETTIM          ;L^uten -> T#0 neu aufsetzen
+00BD 308DFA          856                     jnb     TF0, RUFTON             ;warten bis ges. L^uten beend.
+                     857     ;
+00C0 D803            858                     djnz    R0, RPU_TO              ;-> Remote-Pickup - Timeout
+00C2 020000   F      859                     jmp     ON_LINE                 ;Pick-Up einleiten
+                     860     ;
+                     861 +1  RPU_TO:         
+00C5 C28C            862 +1                  clr     TR0
+00C7 C28D            863 +1                  clr     TF0
+00C9 758C3C          864 +2                  mov     TH0,  #HIGH(-50000)  ;T#0 mit LADEWERT laden
+00CC 758AB0          865 +2                  mov     TL0,  #LOW (-50000)  ;T#0 mit LADEWERT laden
+00CF D28C            866 +1                  setb    TR0
+                     867 +1                                 ;TO f. fremdes Abheben
+00D1 3097E6          868     WAIT4RUF:       jnb     RING, RUFTON            ;erneutes L^uten -> auswerten
+00D4 308DFA          869                     jnb     TF0, WAIT4RUF           ;warten auf erneutes L^uten        
+                     870     ;
+00D7 D9EC            871                     djnz    R1, RPU_TO              ;andere Nebenstelle hat abge-
+00D9 020000   F      872                     jmp     OFF_LINE                ;hoben
+                     873     ;--------------------------- L^ut-Auswertung /ENDE ---------------------------
+                     874     ;
+                     875     ;
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE   17
+
+
+LOC  OBJ            LINE     SOURCE
+
+00DC C209            876     ON_LINE:        clr     NEWUSER                 ;val. DTMF-Ton -> neuer User
+00DE C296            877                     clr     HOOK                    ;Abheben
+                     878     ;
+00E0 7864            879                     mov     R0, #REACT_TO           ;Timeout f^r Reaktion des User
+                     880 +1  WAIT4REA:       
+00E2 C28C            881 +1                  clr     TR0
+00E4 C28D            882 +1                  clr     TF0
+00E6 758C3C          883 +2                  mov     TH0,  #HIGH(-50000)  ;T#0 mit LADEWERT laden
+00E9 758AB0          884 +2                  mov     TL0,  #LOW (-50000)  ;T#0 mit LADEWERT laden
+00EC D28C            885 +1                  setb    TR0
+                     886 +1                 
+00EE 308DFD          887                     jnb     TF0, $
+                     888     ;
+00F1 D2AF            889                     setb    EA                      ;alle Interrupts freigeben
+00F3 D2A8            890                     setb    EX0                     ;DTMF-Empfang erm^glichen
+                     891     ;
+00F5 200905          892                     jb      NEWUSER, RING_END       ;DTMF-Ton empf. ->Ring-Manager
+00F8 D8E8            893                     djnz    R0, WAIT4REA
+                     894     ;
+                     895     ;
+00FA 120000   F      896     OFF_LINE:       call    LOGOUT                  ;Ausstiegs-Sequenz einleiten
+                     897     ;
+00FD 22              898     RING_END:       RET
+                     899     ;
+                     900     ;
+                     901     ;****************************************************************************;
+----                 902                     RSEG PINMNGR                    ;PIN-Check - Manager
+                     903     ;****************************************************************************;
+                     904     ;Einschr^nkungen: keine
+                     905     ;Funktion:  * manipuliert den Akku-Inhalt
+                     906     ;           * nimmt den 4 stelligen PIN-Code auf
+                     907     ;           * um fest zu stellen ob ein neues PIN-Zeichen eingelesen wurde,
+                     908     ;             wird das Register Nr.4/RB1 auf $FF gesetzt.
+                     909     ;           * die eingelesene PIN wird indirekt indiziert gespeichert und auf
+                     910     ;             SVC (Supervisor-Code), EMC (Emergency-Code) oder USC (User-Code)
+                     911     ;             ^berpr^ft.
+                     912     ;           * Reactions:
+                     913     ;              SVC: - Abbruch der seriellen Kommunikation
+                     914     ;                   - Aufheben der Sperre durch die Tastenkombination: # 0
+                     915     ;                   - Zugang wird genehmigt
+                     916     ;                   - keine Spracherkennung m^glich
+                     917     ;              EMC: - keine Verifizierung durch das POS
+                     918     ;                   - serielle Verbindung bleibt erhalten
+                     919     ;                   - Zugang wird genehigt
+                     920     ;                   - keine Spracherkennung m^glich
+                     921     ;              USC: - ^berpr^fung durch POS
+                     922     ;                   - serielle Verbindung bleibt erhalten
+                     923     ;                   - Zugang wird genehigt
+                     924     ;                   - PIN symbolisiert Spracherkennungs-Profil 
+                     925     ;
+                     926 +1  PINCHECK:       
+0000 C0E0            927 +1                   push   ACC                     ;Akku-Wert sichern
+0002 7400            928 +2                   mov    A, #0
+0004 540B            929 +1                   anl    A, #00000011            ;BankNr. ausmaskieren
+0006 C2D4            930 +1                   clr    RS1                     ;Reg.bit 1 r^cksetzen
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE   18
+
+
+LOC  OBJ            LINE     SOURCE
+
+0008 C2D3            931 +1                   clr    RS0                     ;Reg.bit 0 r^cksetzen
+000A 23              932 +1                   rl     A                       ;Bits an die richtige Stelle
+000B 23              933 +1                   rl     A                       ;schieben
+000C 23              934 +1                   rl     A
+000D 42D0            935 +1                   orl    PSW, A                  ;Werte ins PSW eintragen
+000F D0E0            936 +1                   pop    ACC                     ;Akku-Wert zur^ckschreiben
+                     937 +1                  
+0011 7AC8            938                     mov     R2, #PIN_TO             ;Zeit f^r PIN-Eingabe
+0013 7B04            939                     mov     R3, #4                  ;PIN ist vierstellig
+                     940     ;                       
+0015 7800     F      941                     mov     R0, #PIN                ;Adresse des PIN-Speichers
+0017 E5F0            942                     mov     A, B                    ;1. DTMF-Zahl auslesen in Akku
+0019 F6              943                     mov     @R0, A                  ;Zahl auf PIN-Array [0]
+001A 75F0FF          944                     mov     B, #0FFH                ;bereit f^r neue Zahl
+001D 1B              945                     dec     R3                      ;nur mehr drei Zahlen f. PIN
+                     946     ;
+                     947     ;
+                     948 +1  WAIT4PIN:       
+001E C28C            949 +1                  clr     TR0
+0020 C28D            950 +1                  clr     TF0
+0022 758C3C          951 +2                  mov     TH0,  #HIGH(-50000)  ;T#0 mit LADEWERT laden
+0025 758AB0          952 +2                  mov     TL0,  #LOW (-50000)  ;T#0 mit LADEWERT laden
+0028 D28C            953 +1                  setb    TR0
+                     954 +1                                 ;Timeout f. Pin-Eingabe 
+002A 308DFD          955                     jnb     TF0, $
+                     956     ;
+002D E5F0            957                     mov     A, B                    ;DTMF-Zahl auslesen in Akku
+002F B4FF03          958                     cjne    A, #0FFH, NEW_PIN       ;neue PIN - Zahl
+0032 020000   F      959                     jmp     NO_PIN                  ;keine neue PIN - Zahl
+                     960     ;
+0035 08              961     NEW_PIN:        inc     R0                      ;n^chster Idx des PIN-Speicher
+0036 F6              962                     mov     @R0, A                  ;Zahl auf PIN-Array [0]
+0037 75F0FF          963                     mov     B, #0FFH                ;bereit f^r neue Zahl
+003A DBE2            964                     djnz    R3, WAIT4PIN            ;alle PIN-Zahlen eingelesen
+003C 020000   F      965                     jmp     FULL_PIN                ;vollst^ndige PIN auswerten
+                     966     ;
+003F DADD            967     NO_PIN:         djnz    R2, WAIT4PIN            ;realtiver Sprung zu kurz
+0041 020000   F      968                     jmp     INV_PIN
+                     969     ;
+                     970     ;------------------- Kontrolle ob Supervisor-Code /BEGINN --------------------
+0044 7800     F      971     FULL_PIN:       mov     R0, #PIN                ;Adresse des 1. Digit in R0
+0046 E6              972                     mov     A, @R0                  ;1. Digit der PIN in Akku
+0047 B4011B          973                     cjne    A, #SVC1DIG, EMC_CHK    ;1. Digit auf Validit^t testen
+                     974     ;
+004A 7800     F      975                     mov     R0, #PIN+1              ;Adresse des 2. Digit in R0
+004C E6              976                     mov     A, @R0                  ;2. Digit der PIN in Akku
+004D B40215          977                     cjne    A, #SVC2DIG, EMC_CHK    ;2. Digit auf Validit^t testen
+                     978     ;
+0050 7800     F      979                     mov     R0, #PIN+2              ;Adresse des 3. Digit in R0
+0052 E6              980                     mov     A, @R0                  ;3. Digit der PIN in Akku
+0053 B4020F          981                     cjne    A, #SVC3DIG, EMC_CHK    ;3. Digit auf Validit^t testen
+                     982     ;
+0056 7800     F      983                     mov     R0, #PIN+3              ;Adresse des 4. Digit in R0
+0058 E6              984                     mov     A, @R0                  ;4. Digit der PIN in Akku
+0059 B40209          985                     cjne    A, #SVC4DIG, EMC_CHK    ;4. Digit auf Validit^t testen
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE   19
+
+
+LOC  OBJ            LINE     SOURCE
+
+                     986     ;-------------------- Kontrolle ob Supervisor-Code /ENDE ---------------------
+                     987     ;
+                     988                     ;...Reaktion auf g^ltigen Supervisor-Code
+005C C29C            989                     clr     REN                     ;serielle Verbindung abbrechen
+005E C2AC            990                     clr     ES
+0060 D20C            991                     setb    SVC_ON                  ;SVC wurde verwendet
+0062 020000   F      992                     jmp     VAL_PIN                 ;neuer Supervisor angemeldet
+                     993     ;
+                     994     ;
+                     995     ;-------------------- Kontrolle ob Emergency-Code /BEGINN --------------------
+0065 7800     F      996     EMC_CHK:        mov     R0, #PIN                ;Adresse des 1. Digit in R0
+0067 E6              997                     mov     A, @R0                  ;1. Digit der PIN in Akku
+0068 B40117          998                     cjne    A, #EMC1DIG, USC_CHK    ;1. Digit auf Validit^t testen
+                     999     ;
+006B 7800     F     1000                     mov     R0, #PIN+1              ;Adresse des 2. Digit in R0
+006D E6             1001                     mov     A, @R0                  ;2. Digit der PIN in Akku
+006E B40211         1002                     cjne    A, #EMC2DIG, USC_CHK    ;2. Digit auf Validit^t testen
+                    1003     ;
+0071 7800     F     1004                     mov     R0, #PIN+2              ;Adresse des 3. Digit in R0
+0073 E6             1005                     mov     A, @R0                  ;3. Digit der PIN in Akku
+0074 B4010B         1006                     cjne    A, #EMC3DIG, USC_CHK    ;3. Digit auf Validit^t testen
+                    1007     ;
+0077 7800     F     1008                     mov     R0, #PIN+3              ;Adresse des 4. Digit in R0
+0079 E6             1009                     mov     A, @R0                  ;4. Digit der PIN in Akku
+007A B40205         1010                     cjne    A, #EMC4DIG, USC_CHK    ;4. Digit auf Validit^t testen
+                    1011     ;--------------------- Kontrolle ob Emergency-Code /ENDE ---------------------
+                    1012     ;                
+                    1013                     ;...Reaktion auf g^ltigen Emergency-Code
+007D D20D           1014                     setb    EMC_ON                  ;EMC wurde verwendet
+007F 020000   F     1015                     jmp     VAL_PIN                 ;Emergency-Zugang genehmigt
+                    1016     ;
+                    1017     ;
+                    1018     ;---------------------- Kontrolle ob User-Code /BEGINN -----------------------
+                    1019     USC_CHK:        ;Verifizierung durch POS
+                    1020 +1                  
+0082 C2AC           1021 +1                  clr     ES                      ;Sende-Interrupt temp. sperren
+0084 C0E0           1022 +1                  push    ACC                     ;Akku-Wert sichern
+0086 C0D0           1023 +1                  push    PSW                     ;PSW (Reg.Bank) sichern
+                    1024 +2                  
+0088 C0E0           1025 +2                   push   ACC                     ;Akku-Wert sichern
+008A 7402           1026 +3                   mov    A, #2
+008C 540B           1027 +2                   anl    A, #00000011            ;BankNr. ausmaskieren
+008E C2D4           1028 +2                   clr    RS1                     ;Reg.bit 1 r^cksetzen
+0090 C2D3           1029 +2                   clr    RS0                     ;Reg.bit 0 r^cksetzen
+0092 23             1030 +2                   rl     A                       ;Bits an die richtige Stelle
+0093 23             1031 +2                   rl     A                       ;schieben
+0094 23             1032 +2                   rl     A
+0095 42D0           1033 +2                   orl    PSW, A                  ;Werte ins PSW eintragen
+0097 D0E0           1034 +2                   pop    ACC                     ;Akku-Wert zur^ckschreiben
+                    1035 +2                                       ;Sendebuffer w^hlen
+0099 78A0           1036 +2                  mov     R0, #ID_PIN_A                ;ID in Sendebuffer schreiben
+                    1037 +1  ;
+009B 300107         1038 +2                  jnb     QA_STS_A, USER_ADR13     ;keine QA -> ^bergebene Adr.
+009E E519           1039 +1                  mov     A, 19H                  ;empfanges Adr.Reg. auswerten
+00A0 C4             1040 +1                  SWAP    A                       ;dest. und src. Adr. tauschen
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE   20
+
+
+LOC  OBJ            LINE     SOURCE
+
+00A1 F9             1041 +1                  mov     R1, A                   ;Adr. in Sendebuffer speichern
+00A2 020000   F     1042 +2                  jmp     STATUS15                 ;
+                    1043 +1  ;
+00A5 E4             1044 +2       USER_ADR13: clr     A
+00A6 F9             1045 +1                  mov     R1, A                   ;alte Adr. l^schen
+00A7 740A           1046 +1                  mov     A, #OWN_ADR             ;Source Adresse laden (ins LB)
+00A9 540F           1047 +1                  anl     A, #00001111b           ;
+00AB F9             1048 +1                  mov     R1, A
+00AC 7400           1049 +2                  mov     A, # POS0_ADR           ;Dest. Adresse laden (ins HB)
+00AE 540F           1050 +1                  anl     A, #00001111b           ;
+00B0 C4             1051 +1                  SWAP    A
+00B1 49             1052 +1                  orl     A, R1                   
+00B2 F9             1053 +1                  mov     R1, A                   ;fertige Adresse
+                    1054 +1  ;
+00B3 E4             1055 +2         STATUS15: clr     A                       
+00B4 E590           1056 +1                  mov     A, P1                   ;Phone-Line-Condition (P1.6)
+00B6 5440           1057 +1                  anl     A, #01000000b           ;P1.6 ausmaskieren
+00B8 23             1058 +1                  rl      A                       ;um eins nach links schieben
+                    1059 +1  ;
+00B9 100205         1060 +2                  jbc     POSRESET, PR_EXEC17      ;POS-Reset-Auftrag eintragen
+00BC 54BF           1061 +1                  anl     A, #10111111b           ;A hat den Wert von R2
+00BE 020000   F     1062 +2                  jmp     SAFE_CO19                ;zum n^chsten Punkt                
+00C1 4440           1063 +2        PR_EXEC17: orl     A, #01000000b           ;A hat den Wert von R2
+                    1064 +1  ;
+00C3 200305         1065 +2        SAFE_CO19: jb      SAFECO, SCO_EXEC1B       ;Saftey-Cut-Off eintragen
+00C6 54DF           1066 +1                  anl     A, #11011111b           ;A hat den Wert von R2
+00C8 020000   F     1067 +2                  jmp     SRU?1D                   ;zum n^chsten Punkt
+00CB 4420           1068 +2       SCO_EXEC1B: orl     A, #00100000b           ;A hat den Wert von R2
+                    1069 +1  ;
+00CD 200405         1070 +2           SRU?1D: jb      SRU, SRU_EXEC1F          ;SRU-Aktivierung eintragen
+00D0 54EF           1071 +1                  anl     A, #11101111b           ;A hat den Wert von R2
+00D2 020000   F     1072 +2                  jmp     RELCO21                  ;zum n^chsten Punkt
+00D5 4410           1073 +2       SRU_EXEC1F: orl     A, #00010000b          
+                    1074 +1  ;
+00D7 FA             1075 +2          RELCO21: mov     R2, A                   ;Status-Reg. beschreiben
+00D8 E590           1076 +1                  mov     A, P1                   ;RELCO-Zust^nde eintragen
+00DA 540F           1077 +1                  anl     A, #00001111b           ;restliche Pins ausmaskieren
+00DC 4212           1078 +1                  orl     12H, A                  ;Zust^nde ins Stat. Reg. /TXD
+                    1079 +1  ;                                               ;(Registerbank 2)
+00DE B8A006         1080 +2                  cjne    R0, #ID_PIN_A, USERDATA23
+                    1081 +1  
+                    1082 +1                  ;umkopieren der PIN in die Datenregister des Sendebuffers
+00E1 120000   F     1083 +1                  call    PIN2BUF                 ;PIN in Daten-Buffer schreiben
+                    1084 +1  
+00E4 020000   F     1085 +2                  jmp     WRITEEND25
+                    1086 +1  
+00E7 7B00           1087 +2       USERDATA23: mov     R3, # 0              ;kopieren der ^bergebenen
+00E9 7C00           1088 +2                  mov     R4, # 0              ;Daten in den Sendeframe
+00EB 7D00           1089 +2                  mov     R5, # 0
+00ED 7E00           1090 +2                  mov     R6, # 0
+                    1091 +1  ;
+00EF D0D0           1092 +2       WRITEEND25: pop     PSW                     ;PSW zur^ckschreiben
+00F1 D0E0           1093 +1                  pop     ACC                     ;Akku-Wert zur^ckschreiben
+00F3 D2AC           1094 +1                  setb    ES                      ;Sende-Interrupt wieder freig.
+00F5 D299           1095 +1                  setb    TI                      ;Frame senden ausl^sen
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE   21
+
+
+LOC  OBJ            LINE     SOURCE
+
+                    1096 +1                 
+                    1097     ;----------------------- Kontrolle ob User-Code /ENDE ------------------------
+                    1098     ;
+00F7 7A14           1099                     mov     R2, #REPLY_TO           ;Antwort-Timeout
+                    1100 +1  W4PINREP:       
+00F9 C28C           1101 +1                  clr     TR0
+00FB C28D           1102 +1                  clr     TF0
+00FD 758C3C         1103 +2                  mov     TH0,  #HIGH(-50000)  ;T#0 mit LADEWERT laden
+0100 758AB0         1104 +2                  mov     TL0,  #LOW (-50000)  ;T#0 mit LADEWERT laden
+0103 D28C           1105 +1                  setb    TR0
+                    1106 +1                                 ;auf Antwort warten
+0105 308DFD         1107                     jnb     TF0, $
+0108 100B05         1108                     jbc     PINQ_REC, VAL_PINQ      ;wurde PIN-Quittung empf. ?
+010B DAEC           1109                     djnz    R2, W4PINREP            ;Timeout-Abfrage
+010D 020000   F     1110                     jmp     INV_PIN                 ;nichts empfangen -> auflegen
+0110 209607         1111     VAL_PINQ:       jb      HOOK, INV_PIN           ;wurde aufgelegt ?
+                    1112     ;
+                    1113                     ;...Reaktion auf g^ltigen User-Code
+0113 D20E           1114                     setb    USC_ON                  ;USC wurde verwendet
+                    1115     ;
+                    1116     ;
+0115 D209           1117     VAL_PIN:        setb    NEWUSER
+0117 020000   F     1118                     jmp     PINC_END
+                    1119     ;
+011A 120000   F     1120     INV_PIN:        call    LOGOUT                  ;Ausstiegs-Sequenz einleiten
+                    1121     ;
+011D 22             1122     PINC_END:       RET
+                    1123     ;
+                    1124     ;
+                    1125     ;****************************************************************************;
+----                1126                     RSEG USC_SERV                   ;Service f^r den User
+                    1127     ;****************************************************************************;
+                    1128     ;Einschr^nkungen: keine
+                    1129     ;Funktion:  * manipuliert den Akku-Inhalt
+                    1130     ;           * verarbeitet DTMF-Eingaben des eingeloggten Users
+                    1131     ;           * Timeout-^berwachung bis zum n^chsten Tastendruck
+                    1132     ;           * Timeout-^berwachung ist inaktiv wenn SRU aktiv ist !und! die
+                    1133     ;             Verbindung zum POS aufgebaut ist
+                    1134     ;           * Wenn SVC oder EMC aktiv ist kann die Spracherkennung nicht
+                    1135     ;             aktiviert werden
+                    1136     ;           * Tasten:
+                    1137     ;                    - 1-4...Ansteuerung der RELCOs Nr.1 - 4 (Toggelung)
+                    1138     ;                    -   5...Spracherkennung (Toggelung)
+                    1139     ;                    -   *...Saftey-Cutoff einleiten
+                    1140     ;                    -   #...umschalten zur Sonderfunktionstasten-Ebene
+                    1141     ;                    -  #0...Supervisor-Komm.-Sperre wird aufgehoben
+                    1142     ;                    -  #1...manuelles Auflegen einleiten
+                    1143     ;                    -  #2...POS-Reset ^ber serielle Kommunikation einleiten
+                    1144     ;                    -  #3...wie #2 aber nach ca. 30 wird RELCO #3 kompl.
+                    1145     ;                            und erneut nach ca. 10s komplementiert 
+                    1146     ;
+                    1147 +1  SERVICE:        
+0000 C0E0           1148 +1                   push   ACC                     ;Akku-Wert sichern
+0002 7400           1149 +2                   mov    A, #0
+0004 540B           1150 +1                   anl    A, #00000011            ;BankNr. ausmaskieren
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE   22
+
+
+LOC  OBJ            LINE     SOURCE
+
+0006 C2D4           1151 +1                   clr    RS1                     ;Reg.bit 1 r^cksetzen
+0008 C2D3           1152 +1                   clr    RS0                     ;Reg.bit 0 r^cksetzen
+000A 23             1153 +1                   rl     A                       ;Bits an die richtige Stelle
+000B 23             1154 +1                   rl     A                       ;schieben
+000C 23             1155 +1                   rl     A
+000D 42D0           1156 +1                   orl    PSW, A                  ;Werte ins PSW eintragen
+000F D0E0           1157 +1                   pop    ACC                     ;Akku-Wert zur^ckschreiben
+                    1158 +1                  
+0011 75F0FF         1159                     mov     B, #0FFH                ;bereit f^r neue Zahl
+                    1160     ;                
+0014 7AC8           1161     STAND_BY:       mov     R2, #KEY_TO             ;Tastendruck-Timeout setzen
+                    1162 +1  WAIT4KEY:       
+0016 C28C           1163 +1                  clr     TR0
+0018 C28D           1164 +1                  clr     TF0
+001A 758C3C         1165 +2                  mov     TH0,  #HIGH(-50000)  ;T#0 mit LADEWERT laden
+001D 758AB0         1166 +2                  mov     TL0,  #LOW (-50000)  ;T#0 mit LADEWERT laden
+0020 D28C           1167 +1                  setb    TR0
+                    1168 +1                 
+0022 308DFD         1169                     jnb     TF0, $
+                    1170     ;
+0025 E5F0           1171                     mov     A, B                    ;DTMF-Zahl auslesen in Akku
+0027 B4FF0B         1172                     cjne    A, #0FFH, NEW_KEY       ;neue PIN - Zahl
+                    1173     ;
+002A 300403         1174                     jnb     SRU, NORM_TO            ;SRU inaktiv -> norm. TO-Sequ.
+002D 3000E4         1175                     jnb     RX_CO_ER, STAND_BY      ;aktive Verb. zum POS ?
+                    1176     ;
+0030 DAE4           1177     NORM_TO:        djnz    R2, WAIT4KEY            ;auf Tastendruck warten
+0032 020000   F     1178                     jmp     EXITSERV                ;Zeit f^r Eingabe abgelaufen
+                    1179     ;
+                    1180     ;
+                    1181     ;
+0035 B40C1D         1182     NEW_KEY:        cjne    A, #HESCH, KE_HESCH     ;Taste: # gedr^ckt ?
+0038 75F0FF         1183                     mov     B, #0FFH                ;bereit f^r neue Zahl
+                    1184     ;
+003B 7AC8           1185                     mov     R2, #SKEY_TO            ;Timeout f^r Sondertaste
+                    1186 +1  W4SKEY:         
+003D C28C           1187 +1                  clr     TR0
+003F C28D           1188 +1                  clr     TF0
+0041 758C3C         1189 +2                  mov     TH0,  #HIGH(-50000)  ;T#0 mit LADEWERT laden
+0044 758AB0         1190 +2                  mov     TL0,  #LOW (-50000)  ;T#0 mit LADEWERT laden
+0047 D28C           1191 +1                  setb    TR0
+                    1192 +1                 
+0049 308DFD         1193                     jnb     TF0, $
+                    1194     ;
+004C E5F0           1195                     mov     A, B                    ;DTMF-Zahl auslesen in Akku
+004E B4FF07         1196                     cjne    A, #0FFH, NEW_SKEY      ;neue PIN - Zahl (Sondertaste)
+                    1197     ;
+0051 DAEA           1198                     djnz    R2, W4SKEY              ;auf Sondertaste warten
+0053 80AB           1199                     jmp     SERVICE                 ;# und Zahl verwerfen
+                    1200     ;
+0055 020000   F     1201     KE_HESCH:       jmp     SCO                     ;keine Sondertaste
+                    1202     ;
+                    1203     ;---------------------- Sondertasten - Handling /BEGINN ----------------------
+0058 300C0C         1204     NEW_SKEY:       jnb     SVC_ON, SK_1            ;SVC aktiv ? -> 0 auswerten
+                    1205     ;
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE   23
+
+
+LOC  OBJ            LINE     SOURCE
+
+005B B40A09         1206                     cjne    A, #NULL, SK_1          ;wurde die 0 gedr^ckt
+005E 120000   F     1207                     call    EIN_TON                 ;Einschalt-Ton aktivieren
+0061 D29C           1208                     setb    REN                     ;serielle Kommunikation re-
+0063 D2AC           1209                     setb    ES                      ;aktivieren
+0065 8099           1210                     jmp     SERVICE                 ;bereit f^r neue Eingabe
+                    1211     ;
+0067 B40106         1212     SK_1:           cjne    A, #1, SK_2             ;wurde die 1 gedr^ckt
+006A 120000   F     1213                     call    AUS_TON                 ;Ausschalt-Ton einschalten
+006D 020000   F     1214                     jmp     EXITSERV                ;manuelles Auflegen
+                    1215     ;
+0070 B40207         1216     SK_2:           cjne    A, #2, SK_3             ;wurde die 2 gedr^ckt
+0073 120000   F     1217                     call    AUS_TON                 ;Ausschalt-Ton einschalten
+0076 D202           1218                     setb    POSRESET                ;POS-Reset einleiten (Status)
+0078 8086           1219                     jmp     SERVICE                 ;bereit f^r neue Eingabe
+                    1220     ;
+007A B40341         1221     SK_3:           cjne    A, #3, SK_DONE          ;wurde die 3 gedr^ckt
+007D D202           1222                     setb    POSRESET                ;POS-Reset einleiten (Status)
+                    1223     ;
+007F 7B03           1224                     mov     R3, #3                  ;3 facher Wert f. Verz^gerung
+0081 7AC8           1225     W4CUTOFF:       mov     R2, #OFF_DEL            ;Ausschaltverz^gerung setzen
+                    1226     ;
+                    1227 +1  OFF_CYCL:       
+0083 C28C           1228 +1                  clr     TR0
+0085 C28D           1229 +1                  clr     TF0
+0087 758C3C         1230 +2                  mov     TH0,  #HIGH(-50000)  ;T#0 mit LADEWERT laden
+008A 758AB0         1231 +2                  mov     TL0,  #LOW (-50000)  ;T#0 mit LADEWERT laden
+008D D28C           1232 +1                  setb    TR0
+                    1233 +1                 
+008F 308DFD         1234                     jnb     TF0, $
+                    1235     ;
+0092 200204         1236                     jb      POSRESET, NO_SUSP       ;warten bis POSReset angenomm.
+0095 C29C           1237                     clr     REN                     ;serielle Verbindung abbrechen
+0097 C2AC           1238                     clr     ES
+                    1239     ;                
+0099 DAE8           1240     NO_SUSP:        djnz    R2, OFF_CYCL            ;Verz^gerung abwarten
+                    1241     ;
+009B DBE4           1242                     djnz    R3, W4CUTOFF            ;Verz^gerung abwarten
+009D B292           1243                     cpl     REL_CO3                 ;Hardware auschalten
+009F 120000   F     1244                     call    AUS_TON                 ;Ausschalt-Ton einschalten
+                    1245     ;
+00A2 7AC8           1246                     mov     R2, #ON_DEL             ;Einschaltverz^gerung setzen
+                    1247 +1  W4POWER:        
+00A4 C28C           1248 +1                  clr     TR0
+00A6 C28D           1249 +1                  clr     TF0
+00A8 758C3C         1250 +2                  mov     TH0,  #HIGH(-50000)  ;T#0 mit LADEWERT laden
+00AB 758AB0         1251 +2                  mov     TL0,  #LOW (-50000)  ;T#0 mit LADEWERT laden
+00AE D28C           1252 +1                  setb    TR0
+                    1253 +1                 
+00B0 308DFD         1254                     jnb     TF0, $
+00B3 DAEF           1255                     djnz    R2, W4POWER                    
+                    1256     ;
+00B5 B292           1257                     cpl     REL_CO3                 ;Hardware wieder einschalten
+00B7 120000   F     1258                     call    EIN_TON                 ;Einschalt-Ton aktivieren
+00BA D29C           1259                     setb    REN                     ;serielle Kommunikation re-
+00BC D2AC           1260                     setb    ES                      ;aktivieren
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE   24
+
+
+LOC  OBJ            LINE     SOURCE
+
+                    1261     ;
+00BE 020000   F     1262     SK_DONE:        jmp     SERVICE                 ;bereit f^r neue Eingabe
+                    1263     ;----------------------- Sondertasten - Handling /ENDE -----------------------
+                    1264     ;
+                    1265     ;
+                    1266     ;---------------------- Normaltasten - Handling /BEGINN ----------------------
+00C1 B40B0B         1267     SCO:            cjne    A, #STERN, K_1          ;Safety-Cut-Off aktivieren ?
+00C4 43900F         1268                     orl     P1, #00001111b          ;RELCOs auf Power-Up - Zustand
+00C7 D203           1269                     setb    SAFECO                  ;Saftey-Cut-Off wurde aktiv.
+00C9 120000   F     1270                     call    AUS_TON                 ;Ausschalt-Ton aktivieren
+00CC 020000   F     1271                     jmp     SERVICE                 ;bereit f^r neue Eingabe
+                    1272     ;
+                    1273     ;
+00CF B40113         1274     K_1:            cjne    A, #1, K_2              ;wurde die 1 gedr^ckt ?
+00D2 B290           1275                     cpl     REL_CO1                 ;Device Nr.1 komplementieren
+00D4 C203           1276                     clr     SAFECO                  ;Safety-Cut-Off wieder inaktiv
+00D6 209006         1277                     jb      REL_CO1, RELCO1_A       ;wurde aus od. eingeschaltet ?
+                    1278     ;
+00D9 120000   F     1279                     call    EIN_TON                 ;Einschalt-Ton aktivieren
+00DC 020000   F     1280                     jmp     SERVICE                 ;bereit f^r neue Eingabe
+                    1281     ;
+00DF 120000   F     1282     RELCO1_A:       call    AUS_TON                 ;Ausschalt-Ton aktivieren
+00E2 020000   F     1283                     jmp     SERVICE                 ;bereit f^r neue Eingabe
+                    1284     ;
+                    1285     ;
+00E5 B40213         1286     K_2:            cjne    A, #2, K_3              ;wurde die 2 gedr^ckt ?
+00E8 B291           1287                     cpl     REL_CO2                 ;Device Nr.2 komplementieren
+00EA C203           1288                     clr     SAFECO                  ;Safety-Cut-Off wieder inaktiv
+00EC 209106         1289                     jb      REL_CO2, RELCO2_A       ;wurde aus od. eingeschaltet ?
+                    1290     ;
+00EF 120000   F     1291                     call    EIN_TON                 ;Einschalt-Ton aktivieren
+00F2 020000   F     1292                     jmp     SERVICE                 ;bereit f^r neue Eingabe
+                    1293     ;
+00F5 120000   F     1294     RELCO2_A:       call    AUS_TON                 ;Ausschalt-Ton aktivieren
+00F8 020000   F     1295                     jmp     SERVICE                 ;bereit f^r neue Eingabe
+                    1296     ;
+                    1297     ;
+00FB B40313         1298     K_3:            cjne    A, #3, K_4              ;wurde die 3 gedr^ckt ?
+00FE B292           1299                     cpl     REL_CO3                 ;Device Nr.3 komplementieren
+0100 C203           1300                     clr     SAFECO                  ;Safety-Cut-Off wieder inaktiv
+0102 209206         1301                     jb      REL_CO3, RELCO3_A       ;wurde aus od. eingeschaltet ?
+                    1302     ;
+0105 120000   F     1303                     call    EIN_TON                 ;Einschalt-Ton aktivieren
+0108 020000   F     1304                     jmp     SERVICE                 ;bereit f^r neue Eingabe
+                    1305     ;
+010B 120000   F     1306     RELCO3_A:       call    AUS_TON                 ;Ausschalt-Ton aktivieren
+010E 020000   F     1307                     jmp     SERVICE                 ;bereit f^r neue Eingabe
+                    1308     ;
+                    1309     ;
+0111 B40413         1310     K_4:            cjne    A, #4, K_5              ;wurde die 4 gedr^ckt ?
+0114 B293           1311                     cpl     REL_CO4                 ;Device Nr.4 komplementieren
+0116 C203           1312                     clr     SAFECO                  ;Safety-Cut-Off wieder inaktiv
+0118 209306         1313                     jb      REL_CO4, RELCO4_A       ;wurde aus od. eingeschaltet ?
+                    1314     ;
+011B 120000   F     1315                     call    EIN_TON                 ;Einschalt-Ton aktivieren
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE   25
+
+
+LOC  OBJ            LINE     SOURCE
+
+011E 020000   F     1316                     jmp     SERVICE                 ;bereit f^r neue Eingabe
+                    1317     ;
+0121 120000   F     1318     RELCO4_A:       call    AUS_TON                 ;Ausschalt-Ton aktivieren
+0124 020000   F     1319                     jmp     SERVICE                 ;bereit f^r neue Eingabe
+                    1320     ;
+                    1321     ;
+0127 B4050E         1322     K_5:            cjne    A, #5, SRU_A            ;wurde die 5 gedr^ckt ?
+012A 300E0B         1323                     jnb     USC_ON, SRU_A           ;SRU Aktivierung nur mit USC
+012D B204           1324                     cpl     SRU                     ;Speech Reco.  komplementieren
+012F 300406         1325                     jnb     SRU, SRU_A              ;wurde aus od. eingeschaltet ?
+                    1326     ;
+0132 120000   F     1327                     call    EIN_TON                 ;Einschalt-Ton aktivieren
+0135 020000   F     1328                     jmp     SERVICE                 ;bereit f^r neue Eingabe
+                    1329     ;
+0138 120000   F     1330     SRU_A:          call    AUS_TON                 ;Ausschalt-Ton aktivieren
+013B 020000   F     1331                     jmp     SERVICE                 ;bereit f^r neue Eingabe
+                    1332     ;----------------------- Noramltasten - Handling /ENDE -----------------------
+                    1333     ;
+                    1334     ;
+013E 120000   F     1335     EXITSERV:       call    LOGOUT                  ;Ausstiegs-Sequenz einleiten
+                    1336     ;
+0141 22             1337                     RET
+                    1338     ;
+                    1339     ;****************************************************************************;
+----                1340                     RSEG    EIN_TRIG                ;Einschalt-Ton - Ansteuerung
+                    1341     ;****************************************************************************;
+                    1342     ;Einschr^nkungen: keine
+                    1343     ;Funktion:  * triggert das Monoflop mit der Frequenz f^r das Einschalten
+                    1344     ;           * sorgt f^r die Interruptausblendung w^hrend der ^berlagerung des
+                    1345     ;             DTMF-Tons, mit dem des Monoflops und setzt IE0 nach Beendigung
+                    1346     ;             des Signaltons zur^ck und gibt ext. Interrupt wieder frei
+                    1347     ;
+                    1348 +1  EIN_TON:        
+0000 C0E0           1349 +1                   push   ACC                     ;Akku-Wert sichern
+0002 7400           1350 +2                   mov    A, #0
+0004 540B           1351 +1                   anl    A, #00000011            ;BankNr. ausmaskieren
+0006 C2D4           1352 +1                   clr    RS1                     ;Reg.bit 1 r^cksetzen
+0008 C2D3           1353 +1                   clr    RS0                     ;Reg.bit 0 r^cksetzen
+000A 23             1354 +1                   rl     A                       ;Bits an die richtige Stelle
+000B 23             1355 +1                   rl     A                       ;schieben
+000C 23             1356 +1                   rl     A
+000D 42D0           1357 +1                   orl    PSW, A                  ;Werte ins PSW eintragen
+000F D0E0           1358 +1                   pop    ACC                     ;Akku-Wert zur^ckschreiben
+                    1359 +1                  
+0011 C29C           1360                     clr     REN                     ;serielle Verbindung abbrechen
+0013 C2AF           1361                     clr     EA                      ;Interrupts sperren (Timer)
+0015 C294           1362                     clr     MF_EIN                  ;Monoflop triggern
+                    1363 +1                  
+0017 C28C           1364 +1                  clr     TR0
+0019 C28D           1365 +1                  clr     TF0
+001B 758C3C         1366 +2                  mov     TH0,  #HIGH(-50000)  ;T#0 mit LADEWERT laden
+001E 758AB0         1367 +2                  mov     TL0,  #LOW (-50000)  ;T#0 mit LADEWERT laden
+0021 D28C           1368 +1                  setb    TR0
+                    1369 +1                 
+0023 308DFD         1370                     jnb     TF0, $
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE   26
+
+
+LOC  OBJ            LINE     SOURCE
+
+0026 D294           1371                     setb    MF_EIN                  ;Triggerimpuls fertig
+                    1372     ;
+0028 7B11           1373                     mov     R3, #FADE_OUT           ;Ausblendzeit setzen
+                    1374 +1  FADING_E:       
+002A C28C           1375 +1                  clr     TR0
+002C C28D           1376 +1                  clr     TF0
+002E 758C3C         1377 +2                  mov     TH0,  #HIGH(-50000)  ;T#0 mit LADEWERT laden
+0031 758AB0         1378 +2                  mov     TL0,  #LOW (-50000)  ;T#0 mit LADEWERT laden
+0034 D28C           1379 +1                  setb    TR0
+                    1380 +1                 
+0036 308DFD         1381                     jnb     TF0, $
+0039 DBEF           1382                     djnz    R3, FADING_E            ;Ausblendzeit abgelaufen ?
+                    1383     ;
+003B C289           1384                     clr     IE0                     ;Kennzeichnungsbit r^cksetzen
+003D D29C           1385                     setb    REN                     ;Interrupts wieder freigeben
+003F D2AF           1386                     setb    EA                      ;ser. Kommunikation reaktiv.
+                    1387     ;
+0041 22             1388                     RET
+                    1389     ;
+                    1390     ;
+                    1391     ;****************************************************************************;
+----                1392                     RSEG    AUS_TRIG                ;Ausschalt-Ton - Ansteuerung
+                    1393     ;****************************************************************************;
+                    1394     ;Einschr^nkungen: keine
+                    1395     ;Funktion:  * triggert das Monoflop mit der Frequenz f^r das Ausschalten
+                    1396     ;           * sorgt f^r die Interruptausblendung w^hrend der ^berlagerung des
+                    1397     ;             DTMF-Tons, mit dem des Monoflops und setzt IE0 nach Beendigung
+                    1398     ;             des Signaltons zur^ck und gibt ext. Interrupt wieder frei
+                    1399     ;
+                    1400 +1  AUS_TON:        
+0000 C0E0           1401 +1                   push   ACC                     ;Akku-Wert sichern
+0002 7400           1402 +2                   mov    A, #0
+0004 540B           1403 +1                   anl    A, #00000011            ;BankNr. ausmaskieren
+0006 C2D4           1404 +1                   clr    RS1                     ;Reg.bit 1 r^cksetzen
+0008 C2D3           1405 +1                   clr    RS0                     ;Reg.bit 0 r^cksetzen
+000A 23             1406 +1                   rl     A                       ;Bits an die richtige Stelle
+000B 23             1407 +1                   rl     A                       ;schieben
+000C 23             1408 +1                   rl     A
+000D 42D0           1409 +1                   orl    PSW, A                  ;Werte ins PSW eintragen
+000F D0E0           1410 +1                   pop    ACC                     ;Akku-Wert zur^ckschreiben
+                    1411 +1                  
+0011 C29C           1412                     clr     REN                     ;serielle Verbindung abbrechen
+0013 C2AF           1413                     clr     EA                      ;Interrupts sperren (Timer)
+0015 C295           1414                     clr     MF_AUS                  ;Monoflop triggern
+                    1415 +1                  
+0017 C28C           1416 +1                  clr     TR0
+0019 C28D           1417 +1                  clr     TF0
+001B 758C3C         1418 +2                  mov     TH0,  #HIGH(-50000)  ;T#0 mit LADEWERT laden
+001E 758AB0         1419 +2                  mov     TL0,  #LOW (-50000)  ;T#0 mit LADEWERT laden
+0021 D28C           1420 +1                  setb    TR0
+                    1421 +1                 
+0023 308DFD         1422                     jnb     TF0, $
+0026 D295           1423                     setb    MF_AUS                  ;Triggerimpuls fertig
+                    1424     ;
+0028 7B11           1425                     mov     R3, #FADE_OUT           ;Ausblendzeit setzen
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE   27
+
+
+LOC  OBJ            LINE     SOURCE
+
+                    1426 +1  FADING_A:       
+002A C28C           1427 +1                  clr     TR0
+002C C28D           1428 +1                  clr     TF0
+002E 758C3C         1429 +2                  mov     TH0,  #HIGH(-50000)  ;T#0 mit LADEWERT laden
+0031 758AB0         1430 +2                  mov     TL0,  #LOW (-50000)  ;T#0 mit LADEWERT laden
+0034 D28C           1431 +1                  setb    TR0
+                    1432 +1                 
+0036 308DFD         1433                     jnb     TF0, $
+0039 DBEF           1434                     djnz    R3, FADING_A            ;Ausblendzeit abgelaufen ?
+                    1435     ;
+003B C289           1436                     clr     IE0                     ;Kennzeichnungsbit r^cksetzen
+003D D29C           1437                     setb    REN                     ;Interrupts wieder freigeben
+003F D2AF           1438                     setb    EA                      ;ser. Kommunikation reaktiv.
+                    1439     ;
+0041 22             1440                     RET
+                    1441     ;
+                    1442     ;
+                    1443     ;****************************************************************************;
+----                1444                     RSEG    EXIT_SEQ                ;Ausstiegs-Sequenz
+                    1445     ;****************************************************************************;
+                    1446     ;Einschr^nkungen: keine
+                    1447     ;Funktion:  * leitet ein definierte Logout-Sequenz ein
+                    1448     ;
+0000 D296           1449     LOGOUT:         setb    HOOK                    ;auflegen
+0002 C209           1450                     clr     NEWUSER                 ;User abmelden
+0004 C204           1451                     clr     SRU                     ;Spracherkennung deaktivieren
+0006 D29C           1452                     setb    REN                     ;serielle Kommunikation re-
+0008 D2AC           1453                     setb    ES                      ;aktivieren (falls inaktiv)
+000A C20C           1454                     clr     SVC_ON                  ;Zutritts-Code zur^cksetzen
+000C C20D           1455                     clr     EMC_ON                  ;Zutritts-Code zur^cksetzen
+000E C20E           1456                     clr     USC_ON                  ;Zutritts-Code zur^cksetzen
+                    1457     ;
+0010 22             1458                     RET
+                    1459     ;
+                    1460     ;
+                    1461     ;****************************************************************************;
+----                1462                     RSEG HAUPTPRG                   ;Hauptprogramm
+                    1463     ;****************************************************************************;
+                    1464     ;
+0000 C2AF           1465     INIT:           clr     EA                      ;alle Interrupts sperren
+0002 758100   F     1466                     mov     SP, #?Stack-1           ;Stackpointer positionieren
+                    1467     ;                                                
+                    1468     ;Flags resitieren...
+0005 C200           1469                     clr     RX_CO_ER
+0007 C202           1470                     clr     POSRESET       
+0009 C203           1471                     clr     SAFECO         
+000B C204           1472                     clr     SRU           
+000D C205           1473                     clr     TX_CO_ER       
+000F C206           1474                     clr     RUN_XD_T0      
+0011 C207           1475                     clr     RUN_XD_T1      
+0013 C208           1476                     clr     CS_Q_REC         
+0015 C209           1477                     clr     NEWUSER        
+0017 C20A           1478                     clr     DTMF_FL        
+0019 C20B           1479                     clr     PINQ_REC
+001B C20C           1480                     clr     SVC_ON         
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE   28
+
+
+LOC  OBJ            LINE     SOURCE
+
+001D C20D           1481                     clr     EMC_ON         
+001F C20E           1482                     clr     USC_ON         
+0021 C20F           1483                     clr     FLAG16         
+0023 C210           1484                     clr     FLAG17         
+0025 C211           1485                     clr     FLAG18         
+0027 C212           1486                     clr     FLAG19         
+0029 C213           1487                     clr     FLAG20         
+                    1488     ;Parametrierungen...
+002B 4390C0         1489                     orl     P1, #11000000b          ;Ring-bereit und auflegen
+                    1490 +1                  
+002E C0E0           1491 +1                   push   ACC                     ;Akku-Wert sichern
+0030 7401           1492 +2                   mov    A, #1
+0032 540B           1493 +1                   anl    A, #00000011            ;BankNr. ausmaskieren
+0034 C2D4           1494 +1                   clr    RS1                     ;Reg.bit 1 r^cksetzen
+0036 C2D3           1495 +1                   clr    RS0                     ;Reg.bit 0 r^cksetzen
+0038 23             1496 +1                   rl     A                       ;Bits an die richtige Stelle
+0039 23             1497 +1                   rl     A                       ;schieben
+003A 23             1498 +1                   rl     A
+003B 42D0           1499 +1                   orl    PSW, A                  ;Werte ins PSW eintragen
+003D D0E0           1500 +1                   pop    ACC                     ;Akku-Wert zur^ckschreiben
+                    1501 +1                  
+003F 7A03           1502                     mov     R2, #RETRY_INI          ;Startwert f^r Retrys (Empf.)
+0041 7B03           1503                     mov     R3, #RETRY_INI          ;Startwert f^r Retrys (Send.)
+                    1504 +1                  
+0043 C0E0           1505 +1                   push   ACC                     ;Akku-Wert sichern
+0045 7400           1506 +2                   mov    A, #0
+0047 540B           1507 +1                   anl    A, #00000011            ;BankNr. ausmaskieren
+0049 C2D4           1508 +1                   clr    RS1                     ;Reg.bit 1 r^cksetzen
+004B C2D3           1509 +1                   clr    RS0                     ;Reg.bit 0 r^cksetzen
+004D 23             1510 +1                   rl     A                       ;Bits an die richtige Stelle
+004E 23             1511 +1                   rl     A                       ;schieben
+004F 23             1512 +1                   rl     A
+0050 42D0           1513 +1                   orl    PSW, A                  ;Werte ins PSW eintragen
+0052 D0E0           1514 +1                   pop    ACC                     ;Akku-Wert zur^ckschreiben
+                    1515 +1                  
+                    1516     ;
+                    1517     ;
+                    1518     ;Timer #0 initialisieren...
+0054 5389F0         1519                     anl     TMOD, #11110000b        ;Timer; TR gesteuert;
+0057 438901         1520                     orl     TMOD, #00000001b        ;Mode1 (16Bit-Timer)
+005A 5388CE         1521                     anl     TCON, #11001110b        ;T#0 stoppen und TF0 l^schen
+005D 438801         1522                     orl     TCON, #00000001b        ;/INT0 ist flankensensitiv
+0060 C2A9           1523                     clr     ET0                     ;Sperre des T#0 - Interrupts
+                    1524     ;
+                    1525     ;Timer #1 initialisieren...
+0062 53890F         1526                     anl     TMOD, #00001111b        ;Timer; TR gesteuert;
+0065 438910         1527                     orl     TMOD, #00010000b        ;Mode1 (16Bit-Timer)
+0068 53883E         1528                     anl     TCON, #00111110b        ;T#1 stoppen und TF1 l^schen
+006B 438801         1529                     orl     TCON, #00000001b        ;/INT0 ist flankensensitiv
+006E C2AB           1530                     clr     ET1                     ;Sperre des T#1 - Interrupts
+                    1531     ;
+                    1532     ;serielle Schnittstelle initialisieren:
+                    1533     ;19200 Baud / 1Startbit / 8Daten / 1Stopbit / kein Parity
+0070 53C800         1534                     anl     T2CON, #00000000b       ;T2CON l^schen
+0073 D2CD           1535                     setb    RCLK                    ;Timer#2 wird als Baudraten-
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE   29
+
+
+LOC  OBJ            LINE     SOURCE
+
+0075 D2CC           1536                     setb    TCLK                    ;generator verwendet
+0077 75CBFF         1537                     mov     RCAP2H, #HIGH(65518)    ;Baudrate := 19200 (FFh)
+007A 75CAEE         1538                     mov     RCAP2L, #LOW(65518)     ;Baudrate := 19200 (EEh)
+                    1539                                                     ;nichts in TL2, TH2 schreiben!
+007D C298           1540                     clr     RI                      ;RXD-Kennzeichnungsbit l^schen
+007F C299           1541                     clr     TI                      ;TXD-Kennzeichnungsbit l^schen
+0081 C29F           1542                     clr     SM0                     ;Mode 1 (8bit UART)
+0083 D29E           1543                     setb    SM1                     ;Mode 1 (8bit UART)
+0085 D2CA           1544                     setb    TR2                     ;Timer#2 starten                        
+                    1545     ;
+0087 7828           1546                     mov     R0, #40                 ;2s Wartezeit auf Port-Init
+                    1547 +1  PORTINIT:       
+0089 C28C           1548 +1                  clr     TR0
+008B C28D           1549 +1                  clr     TF0
+008D 758C3C         1550 +2                  mov     TH0,  #HIGH(-50000)  ;T#0 mit LADEWERT laden
+0090 758AB0         1551 +2                  mov     TL0,  #LOW (-50000)  ;T#0 mit LADEWERT laden
+0093 D28C           1552 +1                  setb    TR0
+                    1553 +1                                 
+0095 308DFD         1554                     jnb     TF0, $
+0098 D8EF           1555                     djnz    R0, PORTINIT
+                    1556     ;
+009A D29C           1557                     setb    REN                     ;Empfangsfreigabe aktiviern
+009C D2AC           1558                     setb    ES                      ;seriellen Interrupt freigeben
+009E D2AF           1559                     setb    EA                      ;Interrupts freigeben
+                    1560     ;
+                    1561     ;
+                    1562     ;-------------- Schrittschaltwerk des Hauptprogramms /BEGINN -----------------
+00A0 2097FD         1563     WAIT4JOB:       jb      RING, $                 ;auf Rufton warten
+00A3 120000   F     1564                     call    RINGING                 ;Rufton Handshake
+                    1565     ;
+00A6 3009F7         1566                     jnb     NEWUSER, WAIT4JOB       ;Verbindungsabruch ->neuer Job
+00A9 120000   F     1567                     call    PINCHECK                ;PIN ^berpr^fen
+                    1568     ;                
+00AC 3009F1         1569                     jnb     NEWUSER, WAIT4JOB       ;Verbindungsabruch ->neuer Job
+00AF 120000   F     1570                     call    SERVICE                 ;User-Service
+                    1571     ;
+00B2 80EC           1572                     jmp     WAIT4JOB                ;auf n^chsten Anruf warten
+                    1573     ;--------------- Schrittschaltwerk des Hauptprogramms /ENDE ------------------
+                    1574     ;
+                    1575     ;
+                    1576     ;****************************************************************************;
+----                1577                     RSEG    INTSERV                 ;Interruptserviceroutine
+                    1578     ;****************************************************************************;
+0000 C2AF           1579     IS_DTMF:        clr     EA                      ;alle Interrupts sperren
+0002 D20A           1580                     setb    DTMF_FL                 ;DTMF-Interrupt ausgl^st
+0004 C2AF           1581     IS_BEG:         clr     EA                      ;alle Interrupts sperren
+0006 C0E0           1582                     push    ACC                     ;Akku-Inhalt sichern
+0008 C0D0           1583                     push    PSW                     ;u. a. Reg.-Bank sichern
+                    1584     ;
+                    1585     ;---------------- DTMF-States zur DTMF-Ton-Auswertung /BEGINN ----------------
+000A 100A03         1586                     jbc     DTMF_FL,DTMF_INT        ;externer DTMF-Interrupt?
+000D 020000   F     1587                     jmp     ST_RXD
+                    1588     ;
+0010 D209           1589     DTMF_INT:       setb    NEWUSER                 ;neuer User -> Ring-Manager
+                    1590     ;
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE   30
+
+
+LOC  OBJ            LINE     SOURCE
+
+0012 90FC00         1591                     mov     DPTR, #DTMF_DEC         ;Adresse des DTMF-Dekoders
+0015 E0             1592                     movx    A, @DPTR                ;DTMF-Daten von Datenbus holen
+0016 540F           1593                     anl     A, #00001111b           ;High-Nibble ausmakieren
+0018 F5F0           1594                     mov     B, A                    ;DTMF-Zahl in Reg. B sichern
+                    1595     ;                        
+001A 020000   F     1596                     jmp     IS_END
+                    1597     ;----------------- DTMF-States zur DTMF-Ton-Auswertung /ENDE -----------------
+                    1598     ;
+                    1599     ;
+                    1600     ;------------ Empfangs-States der seriellen Kommunikation /BEGINN ------------
+001D 209803         1601     ST_RXD:         jb      RI, RXD_INT             ;RXD-INT? -> Auswertung
+0020 020000   F     1602                     jmp     ST_TXD                  ;sonst n^chster State
+                    1603     ;
+0023 120000   F     1604     RXD_INT:        call    RXD_FRAME
+0026 300003         1605                     jnb     RX_CO_ER, RD_PROC       ;liegt ein Komm. fehler vor ?
+0029 020000   F     1606                     jmp     EXIT_RXD                ;ja -> Abbruch 
+                    1607     ;
+002C 120000   F     1608     RD_PROC:        call    WP2_READ                ;Empfangsbuffer auslesen        
+002F 200103         1609                     jb      QA_STS_A, QA            ;Schnellantwort /Status notw.?
+0032 020000   F     1610                     jmp     IS_END
+                    1611     ;
+                    1612     QA:                                             ;Status-Transfer nach Anfrage
+                    1613 +1                  
+0035 C2AC           1614 +1                  clr     ES                      ;Sende-Interrupt temp. sperren
+0037 C0E0           1615 +1                  push    ACC                     ;Akku-Wert sichern
+0039 C0D0           1616 +1                  push    PSW                     ;PSW (Reg.Bank) sichern
+                    1617 +2                  
+003B C0E0           1618 +2                   push   ACC                     ;Akku-Wert sichern
+003D 7402           1619 +3                   mov    A, #2
+003F 540B           1620 +2                   anl    A, #00000011            ;BankNr. ausmaskieren
+0041 C2D4           1621 +2                   clr    RS1                     ;Reg.bit 1 r^cksetzen
+0043 C2D3           1622 +2                   clr    RS0                     ;Reg.bit 0 r^cksetzen
+0045 23             1623 +2                   rl     A                       ;Bits an die richtige Stelle
+0046 23             1624 +2                   rl     A                       ;schieben
+0047 23             1625 +2                   rl     A
+0048 42D0           1626 +2                   orl    PSW, A                  ;Werte ins PSW eintragen
+004A D0E0           1627 +2                   pop    ACC                     ;Akku-Wert zur^ckschreiben
+                    1628 +2                                       ;Sendebuffer w^hlen
+004C 78D2           1629 +2                  mov     R0, #ID_STS_D                ;ID in Sendebuffer schreiben
+                    1630 +1  ;
+004E 300107         1631 +2                  jnb     QA_STS_A, USER_ADR26     ;keine QA -> ^bergebene Adr.
+0051 E519           1632 +1                  mov     A, 19H                  ;empfanges Adr.Reg. auswerten
+0053 C4             1633 +1                  SWAP    A                       ;dest. und src. Adr. tauschen
+0054 F9             1634 +1                  mov     R1, A                   ;Adr. in Sendebuffer speichern
+0055 020000   F     1635 +2                  jmp     STATUS28                 ;
+                    1636 +1  ;
+0058 E4             1637 +2       USER_ADR26: clr     A
+0059 F9             1638 +1                  mov     R1, A                   ;alte Adr. l^schen
+005A 740A           1639 +1                  mov     A, #OWN_ADR             ;Source Adresse laden (ins LB)
+005C 540F           1640 +1                  anl     A, #00001111b           ;
+005E F9             1641 +1                  mov     R1, A
+005F 7400           1642 +2                  mov     A, # 0           ;Dest. Adresse laden (ins HB)
+0061 540F           1643 +1                  anl     A, #00001111b           ;
+0063 C4             1644 +1                  SWAP    A
+0064 49             1645 +1                  orl     A, R1                   
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE   31
+
+
+LOC  OBJ            LINE     SOURCE
+
+0065 F9             1646 +1                  mov     R1, A                   ;fertige Adresse
+                    1647 +1  ;
+0066 E4             1648 +2         STATUS28: clr     A                       
+0067 E590           1649 +1                  mov     A, P1                   ;Phone-Line-Condition (P1.6)
+0069 5440           1650 +1                  anl     A, #01000000b           ;P1.6 ausmaskieren
+006B 23             1651 +1                  rl      A                       ;um eins nach links schieben
+                    1652 +1  ;
+006C 100205         1653 +2                  jbc     POSRESET, PR_EXEC2A      ;POS-Reset-Auftrag eintragen
+006F 54BF           1654 +1                  anl     A, #10111111b           ;A hat den Wert von R2
+0071 020000   F     1655 +2                  jmp     SAFE_CO2C                ;zum n^chsten Punkt                
+0074 4440           1656 +2        PR_EXEC2A: orl     A, #01000000b           ;A hat den Wert von R2
+                    1657 +1  ;
+0076 200305         1658 +2        SAFE_CO2C: jb      SAFECO, SCO_EXEC2E       ;Saftey-Cut-Off eintragen
+0079 54DF           1659 +1                  anl     A, #11011111b           ;A hat den Wert von R2
+007B 020000   F     1660 +2                  jmp     SRU?30                   ;zum n^chsten Punkt
+007E 4420           1661 +2       SCO_EXEC2E: orl     A, #00100000b           ;A hat den Wert von R2
+                    1662 +1  ;
+0080 200405         1663 +2           SRU?30: jb      SRU, SRU_EXEC32          ;SRU-Aktivierung eintragen
+0083 54EF           1664 +1                  anl     A, #11101111b           ;A hat den Wert von R2
+0085 020000   F     1665 +2                  jmp     RELCO34                  ;zum n^chsten Punkt
+0088 4410           1666 +2       SRU_EXEC32: orl     A, #00010000b          
+                    1667 +1  ;
+008A FA             1668 +2          RELCO34: mov     R2, A                   ;Status-Reg. beschreiben
+008B E590           1669 +1                  mov     A, P1                   ;RELCO-Zust^nde eintragen
+008D 540F           1670 +1                  anl     A, #00001111b           ;restliche Pins ausmaskieren
+008F 4212           1671 +1                  orl     12H, A                  ;Zust^nde ins Stat. Reg. /TXD
+                    1672 +1  ;                                               ;(Registerbank 2)
+0091 B8A006         1673 +2                  cjne    R0, #ID_PIN_A, USERDATA36
+                    1674 +1  
+                    1675 +1                  ;umkopieren der PIN in die Datenregister des Sendebuffers
+0094 120000   F     1676 +1                  call    PIN2BUF                 ;PIN in Daten-Buffer schreiben
+                    1677 +1  
+0097 020000   F     1678 +2                  jmp     WRITEEND38
+                    1679 +1  
+009A 7B00           1680 +2       USERDATA36: mov     R3, # 0              ;kopieren der ^bergebenen
+009C 7C00           1681 +2                  mov     R4, # 0              ;Daten in den Sendeframe
+009E 7D00           1682 +2                  mov     R5, # 0
+00A0 7E00           1683 +2                  mov     R6, # 0
+                    1684 +1  ;
+00A2 D0D0           1685 +2       WRITEEND38: pop     PSW                     ;PSW zur^ckschreiben
+00A4 D0E0           1686 +1                  pop     ACC                     ;Akku-Wert zur^ckschreiben
+00A6 D2AC           1687 +1                  setb    ES                      ;Sende-Interrupt wieder freig.
+00A8 D299           1688 +1                  setb    TI                      ;Frame senden ausl^sen
+                    1689 +1                 
+00AA 020000   F     1690                     jmp     ST_TXD                  ;in den Sende-State springen
+                    1691     ;
+00AD 020000   F     1692     EXIT_RXD:       jmp     IS_END
+                    1693     ;------------- Empfangs-States der seriellen Kommunikation /ENDE -------------
+                    1694     ;
+                    1695     ;
+                    1696     ;-------------- Sende-States der seriellen Kommunikation /BEGINN -------------
+00B0 209903         1697     ST_TXD:         jb     TI, TXD_INT              ;TXD-INT? -> Auswertung
+00B3 020000   F     1698                     jmp    IS_END                   ;Ende der Int.-Serviceroutine
+                    1699     ;
+00B6 300102         1700     TXD_INT:        jnb     QA_STS_A, TD_PROC       ;Schnellantwort absetzen
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE   32
+
+
+LOC  OBJ            LINE     SOURCE
+
+00B9 C201           1701                     clr     QA_STS_A
+00BB 120000   F     1702     TD_PROC:        call    TXD_FRAME               ;Sendeframe - Handshake
+00BE 020000   F     1703                     jmp     IS_END
+                    1704     ;--------------- Sende-States der seriellen Kommunikation /ENDE --------------
+                    1705     ;
+                    1706     ;
+00C1 D0D0           1707     IS_END:         pop     PSW
+00C3 D0E0           1708                     pop     ACC
+00C5 C299           1709                     clr     TI                      ;Transmit Int. Flag l^schen
+00C7 C298           1710                     clr     RI                      ;Receive Int. Flag l^schen
+00C9 D2AF           1711                     setb    ea
+00CB 32             1712                     reti
+                    1713     ;
+                    1714                     END                             ;eof - POI.src
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE   33
+
+
+XREF SYMBOL TABLE LISTING
+---- ------ ----- -------
+
+
+N A M E     T Y P E   V A L U E       ATTRIBUTES AND REFERENCES
+
+?STACK . .  I SEG     0032H           REL=UNIT  111# 130 1466
+ACC. . . .  D ADDR    00E0H   A         317 321 330 343 356 359 368 397 421 430 432 566 586 589 598 705 731 740 745 754 
+                                        759 762 771 830 927 936 1022 1025 1034 1093 1148 1157 1349 1358 1401 1410 1491 
+                                        1500 1505 1514 1582 1615 1618 1627 1686 1708
+ACK. . . .    NUMB    0006H   A         217# 442 534 682 687
+ALSO_T1R .  C ADDR    0072H   R       SEG=RXD_HS  476 483#
+ALSO_T1T .  C ADDR    0084H   R       SEG=TXD_HS  658 665#
+AUS_TON. .  C ADDR    0000H   R       SEG=AUS_TRIG  1213 1217 1244 1270 1282 1294 1306 1318 1330 1400#
+AUS_TRIG .  C SEG     0042H           REL=UNIT  124# 1392
+B. . . . .  D ADDR    00F0H   A         942 944 957 963 1159 1171 1183 1195 1594
+C_T2 . . .  B ADDR    00C8H.1 A         195#
+CALC_CS. .  C ADDR    001AH   R       SEG=TXD_HS  603# 605
+CO_KO_RX .  C ADDR    00B4H   R       SEG=RXD_HS  447 463 481 486 517 525#
+CO_KO_TX .  C ADDR    00BEH   R       SEG=TXD_HS  620 645 663 668 682 690 693 700#
+CO_OK_RX .  C ADDR    00C1H   R       SEG=RXD_HS  510 531#
+CO_OK_TX .  C ADDR    00B9H   R       SEG=TXD_HS  688 697#
+COKORX . .  C ADDR    0032H   R       SEG=RXD_HS  435 439 447#
+COKOTX . .  C ADDR    0038H   R       SEG=TXD_HS  613 620#
+COPY_PIN .  C ADDR    001BH   R       SEG=TX_PIN  336# 340
+CP_RL2 . .  B ADDR    00C8H.0 A         196#
+CS_Q_REC .  B ADDR    0021H.0 A         173# 628 680 686 1476
+DEF_PUN. .    NUMB    0002H   A         235# 756
+DELY_T1R .  C ADDR    00E4H   R       SEG=RXD_HS  540 554#
+DTMF_DEC .    NUMB    FC00H   A         240# 1591
+DTMF_FL. .  B ADDR    0021H.2 A         175# 1478 1580 1586
+DTMF_INT .  C ADDR    0010H   R       SEG=INTSERV  1586 1589#
+EA . . . .  B ADDR    00A8H.7 A         889 1361 1386 1413 1438 1465 1559 1579 1581 1711
+EIN_TON. .  C ADDR    0000H   R       SEG=EIN_TRIG  1207 1258 1279 1291 1303 1315 1327 1348#
+EIN_TRIG .  C SEG     0042H           REL=UNIT  123# 1340
+EMC_CHK. .  C ADDR    0065H   R       SEG=PINMNGR  973 977 981 985 996#
+EMC_ON . .  B ADDR    0021H.5 A         178# 1014 1455 1481
+EMC1DIG. .    NUMB    0001H   A         251# 998
+EMC2DIG. .    NUMB    0002H   A         252# 1002
+EMC3DIG. .    NUMB    0001H   A         253# 1006
+EMC4DIG. .    NUMB    0002H   A         254# 1010
+ERGO_T1R .  C ADDR    0086H   R       SEG=RXD_HS  489 495#
+ERGO_T1T .  C ADDR    0098H   R       SEG=TXD_HS  671 677#
+ES . . . .  B ADDR    00A8H.4 A         758 831 990 1021 1094 1209 1238 1260 1453 1558 1614 1687
+ET0. . . .  B ADDR    00A8H.1 A         1523
+ET1. . . .  B ADDR    00A8H.3 A         1530
+ET2. . . .  B ADDR    00A8H.5 A         203#
+EV_RX_T1 .  C ADDR    0020H   R       SEG=RXD_HS  437 439#
+EV_TX_T1 .  C ADDR    002AH   R       SEG=TXD_HS  611 613#
+EX0. . . .  B ADDR    00A8H.0 A         890
+EXEN2. . .  B ADDR    00C8H.3 A         193#
+EXF2 . . .  B ADDR    00C8H.6 A         190#
+EXIT_RXD .  C ADDR    00ADH   R       SEG=INTSERV  1606 1692#
+EXIT_SEQ .  C SEG     0011H           REL=UNIT  125# 1444
+EXITSERV .  C ADDR    013EH   R       SEG=USC_SERV  1178 1214 1335#
+EXTI0. . .  C ADDR    0003H   A         146
+FADE_OUT .    NUMB    0011H   A         269# 1373 1425
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE   34
+
+
+N A M E     T Y P E   V A L U E       ATTRIBUTES AND REFERENCES
+
+FADING_A .  C ADDR    002AH   R       SEG=AUS_TRIG  1426# 1434
+FADING_E .  C ADDR    002AH   R       SEG=EIN_TRIG  1374# 1382
+FLAG16 . .  B ADDR    0021H.7 A         180# 1483
+FLAG17 . .  B ADDR    0022H.0 A         181# 1484
+FLAG18 . .  B ADDR    0022H.1 A         182# 1485
+FLAG19 . .  B ADDR    0022H.2 A         183# 1486
+FLAG20 . .  B ADDR    0022H.3 A         184# 1487
+FLAGS. . .  B SEG     0014H           REL=UNIT  127# 154
+FRM_SEND .  C ADDR    003BH   R       SEG=TXD_HS  622# 626 683
+FULL_PIN .  C ADDR    0044H   R       SEG=PINMNGR  965 971#
+GO2RETRY .  C ADDR    00A0H   R       SEG=RXD_HS  509 515#
+HANG_UP. .  C ADDR    003BH   R       SEG=READ_BUF  390 393#
+HAUPTPRG .  C SEG     00B4H           REL=UNIT  113# 1462
+HESCH. . .    NUMB    000CH   A         264# 1182
+HOOK . . .  B ADDR    0090H.6 A         207# 877 1111 1449
+ID_PIN_A .    NUMB    00A0H   A         223# 817 1036 1080 1673
+ID_PIN_D .    NUMB    00D0H   A         224# 385
+ID_PUN_A .    NUMB    00A1H   A         225# 773
+ID_PUN_D .    NUMB    00D1H   A         226# 376
+ID_STS_A .    NUMB    00A2H   A         227# 381
+ID_STS_D .    NUMB    00D2H   A         228# 1629
+IE0. . . .  B ADDR    0088H.1 A         1384 1436
+INIT . . .  C ADDR    0000H   R       SEG=HAUPTPRG  135 1465#
+INTSERV. .  C SEG     00CCH           REL=UNIT  112# 1577
+INV_PIN. .  C ADDR    011AH   R       SEG=PINMNGR  968 1110 1111 1120#
+IS_BEG . .  C ADDR    0004H   R       SEG=INTSERV  139 143 151 1581#
+IS_DTMF. .  C ADDR    0000H   R       SEG=INTSERV  147 1579#
+IS_END . .  C ADDR    00C1H   R       SEG=INTSERV  1596 1610 1692 1698 1703 1707#
+K_1. . . .  C ADDR    00CFH   R       SEG=USC_SERV  1267 1274#
+K_2. . . .  C ADDR    00E5H   R       SEG=USC_SERV  1274 1286#
+K_3. . . .  C ADDR    00FBH   R       SEG=USC_SERV  1286 1298#
+K_4. . . .  C ADDR    0111H   R       SEG=USC_SERV  1298 1310#
+K_5. . . .  C ADDR    0127H   R       SEG=USC_SERV  1310 1322#
+KE_HESCH .  C ADDR    0055H   R       SEG=USC_SERV  1182 1201#
+KEY_TO . .    NUMB    00C8H   A         257# 1161
+LOGOUT . .  C ADDR    0000H   R       SEG=EXIT_SEQ  393 896 1120 1335 1449#
+MF_AUS . .  B ADDR    0090H.5 A         208# 1414 1423
+MF_EIN . .  B ADDR    0090H.4 A         209# 1362 1371
+NACK . . .    NUMB    0015H   A         218# 527
+NEW_KEY. .  C ADDR    0035H   R       SEG=USC_SERV  1172 1182#
+NEW_PIN. .  C ADDR    0035H   R       SEG=PINMNGR  958 961#
+NEW_SKEY .  C ADDR    0058H   R       SEG=USC_SERV  1196 1204#
+NEWUSER. .  B ADDR    0021H.1 A         174# 876 892 1117 1450 1477 1566 1569 1589
+NO_PIN . .  C ADDR    003FH   R       SEG=PINMNGR  959 967#
+NO_RX_CS .  C ADDR    009DH   R       SEG=RXD_HS  499 512#
+NO_SUSP. .  C ADDR    0099H   R       SEG=USC_SERV  1236 1240#
+NORM_TO. .  C ADDR    0030H   R       SEG=USC_SERV  1174 1177#
+NULL . . .    NUMB    000AH   A         266# 1206
+OFF_CYCL .  C ADDR    0083H   R       SEG=USC_SERV  1227# 1240
+OFF_DEL. .    NUMB    00C8H   A         261# 1225
+OFF_LINE .  C ADDR    00FAH   R       SEG=RINGMNGR  872 896#
+ON_DEL . .    NUMB    00C8H   A         262# 1246
+ON_LINE. .  C ADDR    00DCH   R       SEG=RINGMNGR  859 876#
+OWN_ADR. .    NUMB    000AH   A         231# 374 783 1046 1639
+P1 . . . .  D ADDR    0090H   A         206 207 208 209 210 211 212 213 793 813 1056 1076 1268 1489 1649 1669
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE   35
+
+
+N A M E     T Y P E   V A L U E       ATTRIBUTES AND REFERENCES
+
+PIN_QUIT .  C ADDR    002CH   R       SEG=READ_BUF  381 385#
+PIN_TO . .    NUMB    00C8H   A         241# 938
+PIN. . . .  I SEG     0004H           REL=UNIT  114# 158 332 941 971 975 979 983 996 1000 1004 1008
+PIN2BUF. .  C ADDR    0000H   R       SEG=TX_PIN  317# 820 1083 1676
+PINC_END .  C ADDR    011DH   R       SEG=PINMNGR  1118 1122#
+PINCHECK .  C ADDR    0000H   R       SEG=PINMNGR  926# 1567
+PINMNGR. .  C SEG     011EH           REL=UNIT  121# 902
+PINQ_REC .  B ADDR    0021H.3 A         176# 386 1108 1479
+POI. . . .    ----    ----              2
+PORTINIT .  C ADDR    0089H   R       SEG=HAUPTPRG  1547# 1555
+POS0_ADR .    NUMB    0000H   A         232# 786 1049
+POSRESET .  B ADDR    0020H.2 A         167# 797 1060 1218 1222 1236 1470 1653
+PR_EXEC04.  C ADDR    0063H   R       SEG=RINGMNGR  797 800#
+PR_EXEC17.  C ADDR    00C1H   R       SEG=PINMNGR  1060 1063#
+PR_EXEC2A.  C ADDR    0074H   R       SEG=INTSERV  1653 1656#
+PSW. . . .  D ADDR    00D0H   A         318 329 342 357 367 396 429 433 565 587 597 704 739 753 760 770 829 935 1023 
+                                        1033 1092 1156 1357 1409 1499 1513 1583 1616 1626 1685 1707
+QA_STS_A .  B ADDR    0020H.1 A         166# 380 382 775 1038 1609 1631 1700 1701
+QA . . . .  C ADDR    0035H   R       SEG=INTSERV  1609 1612#
+RCAP2H . .  D ADDR    00CBH   A         199# 1537
+RCAP2L . .  D ADDR    00CAH   A         198# 1538
+RCLK . . .  B ADDR    00C8H.5 A         191# 1535
+RD_PROC. .  C ADDR    002CH   R       SEG=INTSERV  1605 1608#
+REACT_TO .    NUMB    0064H   A         237# 879
+READ_BUF .  C SEG     0046H           REL=UNIT  119# 348
+READ_END .  C ADDR    0041H   R       SEG=READ_BUF  374 383 385 391 394 396#
+REC_FRM. .  C ADDR    007CH   R       SEG=RXD_HS  475 488#
+REC_RETCO.  C ADDR    00ACH   R       SEG=TXD_HS  687 690#
+RECEIVE. .  C ADDR    0088H   R       SEG=RXD_HS  493 497#
+REL_CO1. .  B ADDR    0090H.0 A         213# 1275 1277
+REL_CO2. .  B ADDR    0090H.1 A         212# 1287 1289
+REL_CO3. .  B ADDR    0090H.2 A         211# 1243 1257 1299 1301
+REL_CO4. .  B ADDR    0090H.3 A         210# 1311 1313
+RELCO0E. .  C ADDR    0079H   R       SEG=RINGMNGR  809 812#
+RELCO1_A .  C ADDR    00DFH   R       SEG=USC_SERV  1277 1282#
+RELCO2_A .  C ADDR    00F5H   R       SEG=USC_SERV  1289 1294#
+RELCO21. .  C ADDR    00D7H   R       SEG=PINMNGR  1072 1075#
+RELCO3_A .  C ADDR    010BH   R       SEG=USC_SERV  1301 1306#
+RELCO34. .  C ADDR    008AH   R       SEG=INTSERV  1665 1668#
+RELCO4_A .  C ADDR    0121H   R       SEG=USC_SERV  1313 1318#
+REN. . . .  B ADDR    0098H.4 A         989 1208 1237 1259 1360 1385 1412 1437 1452 1557
+REPLY_TO .    NUMB    0014H   A         242# 1099
+RESET. . .  C ADDR    0000H   A         134
+RESETTIM .  C ADDR    00ACH   R       SEG=RINGMNGR  847# 855
+RETCO. . .    NUMB    0020H   A         219# 520 690
+RETRY_CO .  C ADDR    00A7H   R       SEG=RXD_HS  515 519#
+RETRY_INI.    NUMB    0003H   A         222# 516 532 692 1502 1503
+RI . . . .  B ADDR    0098H.0 A         459 473 475 488 641 655 657 670 1540 1601 1710
+RING_END .  C ADDR    00FDH   R       SEG=RINGMNGR  892 898#
+RING . . .  B ADDR    0090H.7 A         206# 855 868 1563
+RINGING. .  C ADDR    0000H   R       SEG=RINGMNGR  730# 1564
+RINGMNGR .  C SEG     00FEH           REL=UNIT  120# 710
+RPU_TIME .    NUMB    0078H   A         236# 854
+RPU_TO . .  C ADDR    00C5H   R       SEG=RINGMNGR  858 861# 871
+RS0. . . .  B ADDR    00D0H.3 A         325 363 425 593 735 749 766 931 1029 1152 1353 1405 1495 1509 1622
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE   36
+
+
+N A M E     T Y P E   V A L U E       ATTRIBUTES AND REFERENCES
+
+RS1. . . .  B ADDR    00D0H.4 A         324 362 424 592 734 748 765 930 1028 1151 1352 1404 1494 1508 1621
+RTR. . . .    NUMB    0005H   A         216# 435 616
+RTRCS_TO .  C ADDR    0047H   R       SEG=TXD_HS  618 631#
+RUFTON . .  C ADDR    00BAH   R       SEG=RINGMNGR  855# 856 868
+RUN_XD_T0.  B ADDR    0020H.6 A         171# 457 472 480 489 639 654 658 662 671 1474
+RUN_XD_T1.  B ADDR    0020H.7 A         172# 458 471 476 485 640 653 667 1475
+RX_CHKSM .  C ADDR    0093H   R       SEG=RXD_HS  505# 507
+RX_CO_ER .  B ADDR    0020H.0 A         165# 522 525 531 1175 1469 1605
+RX_READY .  C ADDR    0035H   R       SEG=RXD_HS  446 449# 513
+RXD_END. .  C ADDR    00F5H   R       SEG=RXD_HS  523 529 552 565#
+RXD_FRAME.  C ADDR    0000H   R       SEG=RXD_HS  420# 1604
+RXD_FRM. .  C ADDR    0062H   R       SEG=RXD_HS  461 475# 478 483
+RXD_HS . .  C SEG     00FAH           REL=UNIT  116# 403
+RXD_INT. .  C ADDR    0023H   R       SEG=INTSERV  1601 1604#
+RXD_OK . .  C ADDR    0023H   R       SEG=RXD_HS  438 441#
+SAFE_CO06.  C ADDR    0065H   R       SEG=RINGMNGR  799 802#
+SAFE_CO19.  C ADDR    00C3H   R       SEG=PINMNGR  1062 1065#
+SAFE_CO2C.  C ADDR    0076H   R       SEG=INTSERV  1655 1658#
+SAFECO . .  B ADDR    0020H.3 A         168# 802 1065 1269 1276 1288 1300 1312 1471 1658
+SBUF . . .  D ADDR    0099H   A         434 442 498 520 527 534 616 624 679
+SCO_EXEC08  C ADDR    006DH   R       SEG=RINGMNGR  802 805#
+SCO_EXEC1B  C ADDR    00CBH   R       SEG=PINMNGR  1065 1068#
+SCO_EXEC2E  C ADDR    007EH   R       SEG=INTSERV  1658 1661#
+SCO. . . .  C ADDR    00C1H   R       SEG=USC_SERV  1201 1267#
+SEND . . .  C ADDR    009AH   R       SEG=TXD_HS  675 679#
+SERVICE. .  C ADDR    0000H   R       SEG=USC_SERV  1147# 1199 1210 1219 1262 1271 1280 1283 1292 1295 1304 1307 1316 
+                                        1319 1328 1331 1570
+SINT . . .  C ADDR    0023H   A         150
+SK_1 . . .  C ADDR    0067H   R       SEG=USC_SERV  1204 1206 1212#
+SK_2 . . .  C ADDR    0070H   R       SEG=USC_SERV  1212 1216#
+SK_3 . . .  C ADDR    007AH   R       SEG=USC_SERV  1216 1221#
+SK_DONE. .  C ADDR    00BEH   R       SEG=USC_SERV  1221 1262#
+SKEY_TO. .    NUMB    00C8H   A         259# 1185
+SM0. . . .  B ADDR    0098H.7 A         1542
+SM1. . . .  B ADDR    0098H.6 A         1543
+SP . . . .  D ADDR    0081H   A         1466
+SRU_A. . .  C ADDR    0138H   R       SEG=USC_SERV  1322 1323 1325 1330#
+SRU_EXEC0C  C ADDR    0077H   R       SEG=RINGMNGR  807 810#
+SRU_EXEC1F  C ADDR    00D5H   R       SEG=PINMNGR  1070 1073#
+SRU_EXEC32  C ADDR    0088H   R       SEG=INTSERV  1663 1666#
+SRU. . . .  B ADDR    0020H.4 A         169# 807 1070 1174 1324 1325 1451 1472 1663
+SRU?0A . .  C ADDR    006FH   R       SEG=RINGMNGR  804 807#
+SRU?1D . .  C ADDR    00CDH   R       SEG=PINMNGR  1067 1070#
+SRU?30 . .  C ADDR    0080H   R       SEG=INTSERV  1660 1663#
+ST_RXD . .  C ADDR    001DH   R       SEG=INTSERV  1587 1601#
+ST_TXD . .  C ADDR    00B0H   R       SEG=INTSERV  1602 1690 1697#
+STAND_BY .  C ADDR    0014H   R       SEG=USC_SERV  1161# 1175
+STATUS . .  C ADDR    0022H   R       SEG=READ_BUF  376 380#
+STATUS02 .  C ADDR    0055H   R       SEG=RINGMNGR  779 792#
+STATUS15 .  C ADDR    00B3H   R       SEG=PINMNGR  1042 1055#
+STATUS28 .  C ADDR    0066H   R       SEG=INTSERV  1635 1648#
+STERN. . .    NUMB    000BH   A         265# 1267
+SVC_ON . .  B ADDR    0021H.4 A         177# 991 1204 1454 1480
+SVC1DIG. .    NUMB    0001H   A         245# 973
+SVC2DIG. .    NUMB    0002H   A         246# 977
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE   37
+
+
+N A M E     T Y P E   V A L U E       ATTRIBUTES AND REFERENCES
+
+SVC3DIG. .    NUMB    0002H   A         247# 981
+SVC4DIG. .    NUMB    0002H   A         248# 985
+T2CON. . .  D ADDR    00C8H   A         187# 1534
+TAKE_T1R .  C ADDR    004DH   R       SEG=RXD_HS  449 463#
+TAKE_T1T .  C ADDR    005FH   R       SEG=TXD_HS  631 645#
+TCLK . . .  B ADDR    00C8H.4 A         192# 1536
+TCON . . .  D ADDR    0088H   A         1521 1522 1528 1529
+TD_PROC. .  C ADDR    00BBH   R       SEG=INTSERV  1700 1702#
+TF0. . . .  B ADDR    0088H.5 A         452 478 543 549 634 660 838 843 849 856 863 869 882 887 950 955 1102 1107 1164 
+                                        1169 1188 1193 1229 1234 1249 1254 1365 1370 1376 1381 1417 1422 1428 1433 1549 
+                                        1554
+TF1. . . .  B ADDR    0088H.7 A         466 483 556 562 648 665
+TF2. . . .  B ADDR    00C8H.7 A         189#
+TH0. . . .  D ADDR    008CH   A         453 544 635 839 850 864 883 951 1103 1165 1189 1230 1250 1366 1377 1418 1429 
+                                        1550
+TH1. . . .  D ADDR    008DH   A         467 557 649
+TH2. . . .  D ADDR    00CDH   A         200#
+TI . . . .  B ADDR    0098H.1 A         441 443 519 521 526 528 533 535 615 617 622 625 832 1095 1541 1688 1697 1709
+TIMER0 . .  C ADDR    000BH   A         138
+TIMER1 . .  C ADDR    001BH   A         142
+TL0. . . .  D ADDR    008AH   A         454 545 636 840 851 865 884 952 1104 1166 1190 1231 1251 1367 1378 1419 1430 
+                                        1551
+TL1. . . .  D ADDR    008BH   A         468 558 650
+TL2. . . .  D ADDR    00CCH   A         201#
+TMOD . . .  D ADDR    0089H   A         1519 1520 1526 1527
+TR0. . . .  B ADDR    0088H.4 A         437 449 451 455 479 491 540 542 546 550 611 631 633 637 661 673 837 841 848 852 
+                                        862 866 881 885 949 953 1101 1105 1163 1167 1187 1191 1228 1232 1248 1252 1364 
+                                        1368 1375 1379 1416 1420 1427 1431 1548 1552
+TR1. . . .  B ADDR    0088H.6 A         439 463 465 469 484 495 555 559 563 613 645 647 651 666 677
+TR2. . . .  B ADDR    00C8H.2 A         194# 1544
+TRA_FRM. .  C ADDR    008EH   R       SEG=TXD_HS  657 670#
+TX_CHKSM .  C ADDR    00A4H   R       SEG=TXD_HS  680 686#
+TX_CO_ER .  B ADDR    0020H.5 A         170# 697 700 1473
+TX_PIN . .  C SEG     0026H           REL=UNIT  118# 310
+TXD_END. .  C ADDR    00C3H   R       SEG=TXD_HS  698 701 704#
+TXD_FRAME.  C ADDR    0000H   R       SEG=TXD_HS  586# 695 1702
+TXD_FRM. .  C ADDR    0074H   R       SEG=TXD_HS  643 657# 660 665
+TXD_HS . .  C SEG     00C8H           REL=UNIT  117# 571
+TXD_INT. .  C ADDR    00B6H   R       SEG=INTSERV  1697 1700#
+TXD_OK . .  C ADDR    002DH   R       SEG=TXD_HS  612 615#
+TXDFRAME .  C ADDR    00B6H   R       SEG=TXD_HS  691 695#
+USC_CHK. .  C ADDR    0082H   R       SEG=PINMNGR  998 1002 1006 1010 1019#
+USC_ON . .  B ADDR    0021H.6 A         179# 1114 1323 1456 1482
+USC_SERV .  C SEG     0142H           REL=UNIT  122# 1126
+USER_ADR00  C ADDR    0047H   R       SEG=RINGMNGR  775 781#
+USER_ADR13  C ADDR    00A5H   R       SEG=PINMNGR  1038 1044#
+USER_ADR26  C ADDR    0058H   R       SEG=INTSERV  1631 1637#
+USERDATA10  C ADDR    0089H   R       SEG=RINGMNGR  817 824#
+USERDATA23  C ADDR    00E7H   R       SEG=PINMNGR  1080 1087#
+USERDATA36  C ADDR    009AH   R       SEG=INTSERV  1673 1680#
+VAL_PIN. .  C ADDR    0115H   R       SEG=PINMNGR  992 1015 1117#
+VAL_PINQ .  C ADDR    0110H   R       SEG=PINMNGR  1108 1111#
+W4CUTOFF .  C ADDR    0081H   R       SEG=USC_SERV  1225# 1242
+W4PINREP .  C ADDR    00F9H   R       SEG=PINMNGR  1100# 1109
+W4POWER. .  C ADDR    00A4H   R       SEG=USC_SERV  1247# 1255
+MCS-51 MACRO ASSEMBLER    POI                                                                       16.August  PAGE   38
+
+
+N A M E     T Y P E   V A L U E       ATTRIBUTES AND REFERENCES
+
+W4SKEY . .  C ADDR    003DH   R       SEG=USC_SERV  1186# 1198
+WAIT4JOB .  C ADDR    00A0H   R       SEG=HAUPTPRG  1563# 1566 1569 1572
+WAIT4KEY .  C ADDR    0016H   R       SEG=USC_SERV  1162# 1177
+WAIT4PIN .  C ADDR    001EH   R       SEG=PINMNGR  948# 964 967
+WAIT4PUN .  C ADDR    009BH   R       SEG=RINGMNGR  836# 844
+WAIT4REA .  C ADDR    00E2H   R       SEG=RINGMNGR  880# 893
+WAIT4RUF .  C ADDR    00D1H   R       SEG=RINGMNGR  868# 869
+WP2_READ .  C ADDR    0000H   R       SEG=READ_BUF  356# 1608
+WRITEEND12  C ADDR    0091H   R       SEG=RINGMNGR  822 829#
+WRITEEND25  C ADDR    00EFH   R       SEG=PINMNGR  1085 1092#
+WRITEEND38  C ADDR    00A2H   R       SEG=INTSERV  1678 1685#
+
+
+REGISTER BANK(S) USED: 0 1 2 3
+
+ASSEMBLY COMPLETE, NO ERRORS FOUND

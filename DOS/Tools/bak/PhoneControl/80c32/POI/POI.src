@@ -1,0 +1,1323 @@
+$DEBUG RB(0) XREF EP TITLE(POI) DATE(16.August 1997) REGISTERBANK(0,1,2,3)   ;
+NAME POI
+;****************************************************************************;
+;   Copyright:  1997  WePa - Entwicklungsabteilung                           ;
+;****************************************************************************;
+;   Kennzeichnung:                                                           ;
+;       ID-Nr.       030209019677                                            ;
+;       System       Phone-Control                                           ;
+;       Sub-System   Phone-Control Operating Interface -POI                  ;
+;       Funktion     Interface zwischen POS (Phone-Control Operating System) ;
+;                    und dem Anwender                                        ;
+;       Filename     POI.src                                                 ;
+;****************************************************************************;
+;   History:                                                                 ;
+;   Version     Datum       Autor           Bemerkung                        ;
+;   00.01       16.08.97    W. Paulin       Erstellung                       ;
+;   00.02       20.08.97    W. Paulin       Einbau des Kommunikationsmodell  ;
+;   00.03       19.10.97    W. Paulin       Korrekturen durchgefhrt         ;
+;   00.04       21.10.97    W. Paulin       Phone-Handling /Ringing-Upgm.    ;
+;   00.05       25.10.97    W. Paulin       WP2_READ als Unterprogramm       ;
+;                                           PIN-Manager                      ;   
+;   00.06       08.11.97    W. Paulin       Service: Anwenderschnittstelle   ;
+;   01.00       15.11.97    W. Paulin       1. Release                       ;
+;   01.01       22.11.97    W. Paulin       USC_ON bei Init auf Null setzen  ;
+;                                                                            ;
+;****************************************************************************;
+; Beschreibung :                                                             ;
+;               Das POI ist die Schnittstelle zum Anwender.                  ;
+;               Es sorgt fr die Dekodierung der empfangenen Daten und       ;
+;               steuert angeschlossene Hardware an.                          ;
+;               Alle empfangenen Daten werden an den PC ber eine RS232-     ;
+;               Schnitstelle ber das Protokoll WP2000 gesendet.             ;
+;               Empfangene Audiosignale werden an den PC weitergeleitet.     ;
+;****************************************************************************;
+;                                                                            ;
+;
+;Port-Pin-Vergabe:
+;                 P1.7: Eingang fr L„utsignal
+;                 P1.6: Ausgang zum Abheben
+;                 P1.5: Triggerung MFAUS
+;                 P1.4: Triggerung MFEIN
+;                 P1.3: Aktivierung durch Taste "4"
+;                 P1.2: Aktivierung durch Taste "3"
+;                 P1.1: Aktivierung durch Taste "2"
+;                 P1.0: Aktivierung durch Taste "1"
+;
+;Ext. Interrupt-Vergabe:
+;                       /INT0: DTMF-codierte Taste liegt an Ausgangspins an
+;
+;Register-Verwendung:
+;                    *** Registerbank 0 (RS1 = 0, RS0 = 0) ***
+;                    --- Ring - Manager u. Initialisierung ---
+;                    R0: Port-Init-Wartezeit; Pick-Up-Nummer (Startwert)
+;                    R1: Remote Pick-Up - Time ;um fremdes Abheben zu erkennen
+;                    --- PIN - Manager ---   
+;                    R0: aktuelle PIN-Adresse
+;                    R2: PIN-Timeout
+;                    R3: PIN-Counter
+;                    --- SERVICE ---
+;                    R2: Tastendruck-Timeout; HESCH-Timeout, Cut-Off - Timeout
+;                    R3: Ausschaltverz”gerung bei Hardware-Reset
+;                    --- Ein - und Ausschaltsignal - Ansteuerung ---
+;                    R3: Ausblendzeit fr externen Interrupt
+;                    R4: not in use
+;                    R5: not in use
+;                    R6: not in use
+;                    R7: not in use
+;
+;                    *** Registerbank 1 (RS1 = 0, RS0 = 1) ***
+;                    --- TXD - und RXD - Handshake ---
+;                    R0: Adressen-Speicher fr indirekte Adr. (TXD_HS/RXD_HS)
+;                    R1: Z„hlreg. z. Auslesen der 8 Teilframes (TXD_HS/RXD_HS)
+;                        Berechnung der Checksumme (TXD_HS/RXD_HS)
+;                    R2: Retry-Speicher: Startwert: RETRY_INI := 3 (Empfang)
+;                    R3: Retry-Speicher: Startwert: RETRY_INI := 3 (Senden)
+;                    --- TX_PIN - Unterprogramm ---
+;                    R0: Adressen-Speicher fr indirekte Adr. 
+;                    R1: Adressen-Speicher fr indirekte Adr. 
+;                    R4: Z„hlreg. z. Auslesen des PIN-Speichers  
+;                    --- Register fr Interruptservice-Routine ---
+;                    R4: not in use
+;                    R5: not in use
+;                    R6: not in use
+;                    R7: not in use
+;                       
+;                    *** Registerbank 2 (RS1 = 1, RS0 = 0) ***
+;                    --- Sendeframe-Buffer ---
+;                    R0: Frame-Sektion 0: Auftrags-ID
+;                    R1: Frame-Sektion 1: Adress-Register
+;                    R2: Frame-Sektion 2: Status-Register
+;                    R3: Frame-Sektion 3: Daten-Register #0
+;                    R4: Frame-Sektion 4: Daten-Register #1
+;                    R5: Frame-Sektion 5: Daten-Register #2
+;                    R6: Frame-Sektion 6: Daten-Register #3
+;                    R7: Frame-Sektion 7: Check-Summe
+;
+;                    *** Registerbank 3 (RS1 = 1, RS0 = 1) ***
+;                    --- Empfangsframe-Buffer ---
+;                    R0: Frame-Sektion 0: Auftrags-ID
+;                    R1: Frame-Sektion 1: Adress-Register
+;                    R2: Frame-Sektion 2: Status-Register
+;                    R3: Frame-Sektion 3: Daten-Register #0
+;                    R4: Frame-Sektion 4: Daten-Register #1
+;                    R5: Frame-Sektion 5: Daten-Register #2
+;                    R6: Frame-Sektion 6: Daten-Register #3
+;                    R7: Frame-Sektion 7: Check-Summe
+;
+;
+;SEGMENT - NAMEN:
+;
+?STACK                  SEGMENT IDATA           ;eigenen Stackbereich allok.
+INTSERV                 SEGMENT CODE            ;Interruptservice-Routine
+HAUPTPRG                SEGMENT CODE            ;Hauptprogramm
+PIN                     SEGMENT IDATA           ;Speicher der 4 stelligen PIN
+;...Unterprogramme:
+RXD_HS                  SEGMENT CODE            ;Receive-Data Handshake
+TXD_HS                  SEGMENT CODE            ;Transmit-Data Handshake
+TX_PIN                  SEGMENT CODE            ;schreibt PIN in Sendebuffer
+READ_BUF                SEGMENT CODE            ;Liest Empfamgsbuffer aus
+RINGMNGR                SEGMENT CODE            ;Ringing Handshake
+PINMNGR                 SEGMENT CODE            ;PIN-Manager
+USC_SERV                SEGMENT CODE            ;Service fr den User
+EIN_TRIG                SEGMENT CODE            ;Einschalt-Ton - Ansteuerung
+AUS_TRIG                SEGMENT CODE            ;Ausschalt-Ton - Ansteuerung
+EXIT_SEQ                SEGMENT CODE            ;Aussiegs-Sequenz
+;...Hilfsflags:
+FLAGS                   SEGMENT BIT             ;Speicherbereich fr Flags
+;
+;               Stackreservierung
+                RSEG    ?STACK
+                DS      50 
+;
+;               Reset-Einsprungadresse
+                CSEG    AT      RESET
+                LJMP    INIT
+;
+;               Timer0: Interrupt-Einsprungsadresse
+                CSEG    AT      TIMER0
+                LJMP    IS_BEG
+;
+;               Timer1: Interrupt-Einsprungsadresse
+                CSEG    AT      TIMER1
+                LJMP    IS_BEG
+;                
+;               Externer Interrupt #0: Einsprungsadresse
+                CSEG    AT      EXTI0
+                LJMP    IS_DTMF
+;
+;               Serial I/O: Interrupt-Einsprungsadresse
+                CSEG    AT      SINT
+                LJMP    IS_BEG
+;
+;               Speicherplatzreservierung fr Flags
+                RSEG    FLAGS
+                DBIT    20
+;
+;               Speicherplatzreservierung fr PIN
+                RSEG    PIN     
+                DS      4
+
+;+++++++++++++++++++++++++ Definitionen -- BEGINN +++++++++++++++++++++++++++;
+;
+;Symboldefinitionen:
+;
+RX_CO_ER        BIT     0                       ;1-> RXD-Kommunikationsfehler 
+QA_STS_A        BIT     1                       ;1-> Quick-Answer aktivieren
+POSRESET        BIT     2                       ;1-> POS-Reset initieren
+SAFECO          BIT     3                       ;1-> Saftey-Cut-Off aktiviert
+SRU             BIT     4                       ;1-> SRU aktiviert
+TX_CO_ER        BIT     5                       ;1-> TXD-Kommunikationsfehler
+RUN_XD_T0       BIT     6                       ;1-> T#0 zur šbertragung verw.
+RUN_XD_T1       BIT     7                       ;1-> T#1 zur šbertragung verw.
+CS_Q_REC        BIT     8                       ;1-> Checksum.-Quittung empf.
+NEWUSER         BIT     9                       ;1-> neues User - Login war OK
+DTMF_FL         BIT     10                      ;1-> DTMF-Interrupt ausgel”st           
+PINQ_REC        BIT     11                      ;1-> PIN-Quitt. wurde gesendet
+SVC_ON          BIT     12                      ;1-> Supervisor-Code akitv
+EMC_ON          BIT     13                      ;1-> Emergency-Code akitv
+USC_ON          BIT     14                      ;1-> User-Code akitv
+FLAG16          BIT     15
+FLAG17          BIT     16
+FLAG18          BIT     17
+FLAG19          BIT     18
+FLAG20          BIT     19
+;
+;Timer2 - Konstanten festlegen:
+T2CON           DATA    0C8H
+;
+TF2             BIT     0CFH
+EXF2            BIT     0CEH
+RCLK            BIT     0CDH
+TCLK            BIT     0CCH
+EXEN2           BIT     0CBH
+TR2             BIT     0CAH
+C_T2            BIT     0C9H
+CP_RL2          BIT     0C8H
+;
+RCAP2L          DATA    0CAH
+RCAP2H          DATA    0CBH
+TH2             DATA    0CDH
+TL2             DATA    0CCH
+;
+ET2             BIT     0ADH
+;
+;Definitionen der Portpins:
+RING            BIT     P1.7
+HOOK            BIT     P1.6
+MF_AUS          BIT     P1.5
+MF_EIN          BIT     P1.4
+REL_CO4         BIT     P1.3 
+REL_CO3         BIT     P1.2
+REL_CO2         BIT     P1.1
+REL_CO1         BIT     P1.0
+;
+;Definition der Handschake-Konstanten fr WP2000-Protokoll:
+RTR             EQU     005H                    ;Ready to Receive     
+ACK             EQU     006H                    ;Acknowlege           
+NACK            EQU     015H                    ;Not Acknowlege       
+RETCO           EQU     020H                    ;Retry Communication  
+;
+;Definition sonstiger Konstanten fr das WP2000-Protokoll:
+RETRY_INI       EQU     003D                    ;Retry-Anzahl (Startwert:3)
+ID_PIN_A        EQU     0A0H                    ;ID fr PIN-Code-Quittung
+ID_PIN_D        EQU     0D0H                    ;ID fr PIN-Code-Transfer
+ID_PUN_A        EQU     0A1H                    ;ID f. Anfrage der Pick-Up-Nr.
+ID_PUN_D        EQU     0D1H                    ;ID fr Daten der Pick-Up-Nr.
+ID_STS_A        EQU     0A2H                    ;ID fr Status-Anfrage
+ID_STS_D        EQU     0D2H                    ;ID fr Status-Daten
+;
+;Definition der Adressen komunikationsf„higer Stationen:
+OWN_ADR         EQU     00AH                    ;POI-Adr. (0A-0FH) /1.Station
+POS0_ADR        EQU     000H                    ;POS-Adr. (00-09H) /1.Station
+;
+;Definition der Konstanten fr Ring - Manager:
+DEF_PUN         EQU     002D                    ;Default-Wert fr PUN (=2)
+RPU_TIME        EQU     120D                    ;Zeit f. fremdes Abheben (=6s)
+REACT_TO        EQU     100D                    ;Timeout f. User-Reakt. (=5s)
+;
+;Definition der Konstanten fr PIN - Manager:
+DTMF_DEC        EQU   0FC00H                    ;Adresse des DTMF-Decoders
+PIN_TO          EQU     200D                    ;Timeout f. PIN-Eingabe (=10s)
+REPLY_TO        EQU      20D                    ;Timeout f. Antw. v. POS (=1s)
+;
+;Supervisor-Code festlegen:
+SVC1DIG         EQU      01H                    ;1. Digit des SVC
+SVC2DIG         EQU      02H                    ;2. Digit des SVC
+SVC3DIG         EQU      02H                    ;3. Digit des SVC
+SVC4DIG         EQU      02H                    ;4. Digit des SVC
+;
+;Emergency-Code festlegen:
+EMC1DIG         EQU      01H                    ;1. Digit des EMC
+EMC2DIG         EQU      02H                    ;2. Digit des EMC
+EMC3DIG         EQU      01H                    ;3. Digit des EMC
+EMC4DIG         EQU      02H                    ;4. Digit des EMC
+;
+;Definition der Konstanten fr User-Service:
+KEY_TO          EQU     200D                    ;TO fr Tastendruck (10s)
+;############ DEBUG-Zeile:
+SKEY_TO         EQU     200D                    ;Timeout fr Sondertaste (2s)
+;
+OFF_DEL         EQU     200D                    ;Ausschaltverz. x3 /RELCO3
+ON_DEL          EQU     200D                    ;Einschaltverz”gerung /RELCO3
+;
+HESCH           EQU      0CH                    ;#...#00001100b (Sondertaste)
+STERN           EQU      0BH                    ;*...#00001011b 
+NULL            EQU      0AH                    ;0...#00001010b         
+;
+;Definition der Konstanten fr Ein - und Ausschaltsignal - Ansteuerung:
+FADE_OUT        EQU      17D                    ;Ausblendzeit fr ext. Int.
+;
+;Makro-Definitionen:
+;
+;Makroname: T0_INIT(LADEWERT)
+;šbergabe-Parameter: LADEWERT
+;Gltigkeitsbereich: berall anwendbar
+;Funktion:  * l„dt Timer #0 mit dem entsprechenden Ladewert und startet ihn
+;Definition:
+%*DEFINE(T0_INIT(LADEWERT))
+               (
+                clr     TR0
+                clr     TF0
+                mov     TH0,  #HIGH(%LADEWERT)  ;T#0 mit LADEWERT laden
+                mov     TL0,  #LOW (%LADEWERT)  ;T#0 mit LADEWERT laden
+                setb    TR0
+               )
+;
+;Makroname: T1_INIT(LADEWERT)
+;šbergabe-Parameter: LADEWERT
+;Gltigkeitsbereich: berall anwendbar
+;Funktion:  * l„dt Timer #1 mit dem entsprechenden Ladewert und startet ihn
+;Definition:
+%*DEFINE(T1_INIT(LADEWERT))
+               (
+                clr     TR1
+                clr     TF1
+                mov     TH1,  #HIGH(%LADEWERT)  ;T#1 mit LADEWERT laden
+                mov     TL1,  #LOW (%LADEWERT)  ;T#1 mit LADEWERT laden
+                setb    TR1
+               )
+;
+;Makroname: REGBANK(BANKNR)
+;šbergabe-Parameter: BANKNR
+;Gltigkeitsbereich: berall anwendbar (speichert Akku-Wert zwischen)
+;Funktion:  * schaltet auf angegebene Registerbank um
+;Definition:
+%*DEFINE(REGBANK(BANKNR))
+                (
+                 push   ACC                     ;Akku-Wert sichern
+                 mov    A, #%BANKNR
+                 anl    A, #00000011            ;BankNr. ausmaskieren
+                 clr    RS1                     ;Reg.bit 1 rcksetzen
+                 clr    RS0                     ;Reg.bit 0 rcksetzen
+                 rl     A                       ;Bits an die richtige Stelle
+                 rl     A                       ;schieben
+                 rl     A
+                 orl    PSW, A                  ;Werte ins PSW eintragen
+                 pop    ACC                     ;Akku-Wert zurckschreiben
+                )
+;
+;Makroname: WP2_WRITE(ID,DEST_ADR,DAT0,DAT1,DAT2,DAT3)
+;šbergabe-Parameter: ID,DEST_ADR,DAT0,DAT1,DAT2,DAT3
+;Gltigkeitsbereich: berall anwendbar 
+;Funktion:  * schreibt bergebene Werte in den Sendebuffer (Registerbank 2)
+;           * l”st das Absenden des Telegramms aus (TI-Interrupt)
+;           * falls eine Quick-Answer ansteht wird die empfangene Adresse ge-
+;             swaped und das Telegramm mit Handshake zurck geschickt
+;Definition:
+%*DEFINE(WP2_WRITE(ID,DEST_ADR,DAT0,DAT1,DAT2,DAT3))
+        LOCAL USER_ADR LOCAL STATUS   LOCAL PR_EXEC  LOCAL SAFE_CO
+        LOCAL SCO_EXEC LOCAL SRU?     LOCAL SRU_EXEC LOCAL RELCO
+        LOCAL USERDATA LOCAL WRITEEND 
+               (
+                clr     ES                      ;Sende-Interrupt temp. sperren
+                push    ACC                     ;Akku-Wert sichern
+                push    PSW                     ;PSW (Reg.Bank) sichern
+                %REGBANK(2)                     ;Sendebuffer w„hlen
+                mov     R0, #%ID                ;ID in Sendebuffer schreiben
+;
+                jnb     QA_STS_A, %USER_ADR     ;keine QA -> šbergebene Adr.
+                mov     A, 19H                  ;empfanges Adr.Reg. auswerten
+                SWAP    A                       ;dest. und src. Adr. tauschen
+                mov     R1, A                   ;Adr. in Sendebuffer speichern
+                jmp     %STATUS                 ;
+;
+     %USER_ADR: clr     A
+                mov     R1, A                   ;alte Adr. l”schen
+                mov     A, #OWN_ADR             ;Source Adresse laden (ins LB)
+                anl     A, #00001111b           ;
+                mov     R1, A
+                mov     A, #%DEST_ADR           ;Dest. Adresse laden (ins HB)
+                anl     A, #00001111b           ;
+                SWAP    A
+                orl     A, R1                   
+                mov     R1, A                   ;fertige Adresse
+;
+       %STATUS: clr     A                       
+                mov     A, P1                   ;Phone-Line-Condition (P1.6)
+                anl     A, #01000000b           ;P1.6 ausmaskieren
+                rl      A                       ;um eins nach links schieben
+;
+                jbc     POSRESET, %PR_EXEC      ;POS-Reset-Auftrag eintragen
+                anl     A, #10111111b           ;A hat den Wert von R2
+                jmp     %SAFE_CO                ;zum n„chsten Punkt                
+      %PR_EXEC: orl     A, #01000000b           ;A hat den Wert von R2
+;
+      %SAFE_CO: jb      SAFECO, %SCO_EXEC       ;Saftey-Cut-Off eintragen
+                anl     A, #11011111b           ;A hat den Wert von R2
+                jmp     %SRU?                   ;zum n„chsten Punkt
+     %SCO_EXEC: orl     A, #00100000b           ;A hat den Wert von R2
+;
+         %SRU?: jb      SRU, %SRU_EXEC          ;SRU-Aktivierung eintragen
+                anl     A, #11101111b           ;A hat den Wert von R2
+                jmp     %RELCO                  ;zum n„chsten Punkt
+     %SRU_EXEC: orl     A, #00010000b          
+;
+        %RELCO: mov     R2, A                   ;Status-Reg. beschreiben
+                mov     A, P1                   ;RELCO-Zust„nde eintragen
+                anl     A, #00001111b           ;restliche Pins ausmaskieren
+                orl     12H, A                  ;Zust„nde ins Stat. Reg. /TXD
+;                                               ;(Registerbank 2)
+                cjne    R0, #ID_PIN_A, %USERDATA
+
+                ;umkopieren der PIN in die Datenregister des Sendebuffers
+                call    PIN2BUF                 ;PIN in Daten-Buffer schreiben
+
+                jmp     %WRITEEND
+
+     %USERDATA: mov     R3, #%DAT0              ;kopieren der šbergebenen
+                mov     R4, #%DAT1              ;Daten in den Sendeframe
+                mov     R5, #%DAT2
+                mov     R6, #%DAT3
+;
+     %WRITEEND: pop     PSW                     ;PSW zurckschreiben
+                pop     ACC                     ;Akku-Wert zurckschreiben
+                setb    ES                      ;Sende-Interrupt wieder freig.
+                setb    TI                      ;Frame senden ausl”sen
+               )
+;****************************************************************************;
+;Definitionen -- ENDE                                                        ;
+;****************************************************************************;
+;
+;POI - Source-Code:
+;
+;****************************************************************************;
+                RSEG    TX_PIN
+;****************************************************************************;
+;Einschr„nkungen: nur bei genereller Interruptsperre verwenden (WP2_Write)
+;                 verwenden, da R0 und R1 auch in der Int.-Serv. diese
+;                 Register verwendet werden
+;Funktion:  * Tr„gt die PIN in den Sendebuffer ein
+;
+PIN2BUF:        push    ACC
+                push    PSW
+;
+                %REGBANK(1)
+                mov     R0, #PIN-1              ;Adresse des PIN-Speichers -1
+                mov     R1, #12H                ;Adresse der Sende-Daten -1
+                mov     R4, #4                  ;4 Zahlen auslesen
+;
+COPY_PIN:       inc     R0                      ;aktuelle Adresse der PIN
+                inc     R1                      ;aktuelle Adresse der TX-Daten
+                mov     A, @R0                  ;PIN - Zahl auf die Sendedaten
+                mov     @R1, A                  ;Register umkopieren
+                djnz    R4, COPY_PIN            ;alles kopieren
+;
+                pop     PSW
+                pop     ACC
+                RET
+;
+;
+;****************************************************************************;
+                RSEG    READ_BUF
+;****************************************************************************;
+;Einschr„nkungen: Darf nur aus Interruptservice-Routine angesprungen werden,
+;                 da erst nach Empfang ausgelesen werden darf (RI -> Int.)
+;Funktion:  * liest den Empfangsframebuffer (Registerbank Nr.3) aus
+;           * packt das Telegramm aus; kopiert Werte in entsprechende Register
+;           * leitet je nach ID eine Schnellantwort ein   
+;
+WP2_READ:       push    ACC                     ;Akku-Wert sichern
+                push    PSW                     ;PSW (Reg.Bank) sichern
+                %REGBANK(3)                     ;...Zieladresse auswerten:
+                mov     A, R1
+                anl     A, #11110000b           ;src-Adr. ausmaskieren
+                SWAP    A                       ;Nibbles tauschen
+;
+                cjne    A, #OWN_ADR, READ_END   ;richtig adressiert?
+;                                               ;...ID auswerten
+                cjne    R0, #ID_PUN_D, STATUS   ;wurden PUN-Daten geschickt?
+                mov     A, R3                   ;PUN heraus kopieren
+                mov     00H, A                  ;PUN in R0 /RB0 kopieren
+;
+STATUS:         clr     QA_STS_A
+                cjne    R0, #ID_STS_A, PIN_QUIT ;wurde der Status angefragt?
+                setb    QA_STS_A                ;Schnell-Antwort auf Status- 
+                jmp     READ_END
+;
+PIN_QUIT:       cjne    R0, #ID_PIN_D, READ_END ;wurde PIN-Quittung geschickt?
+                setb    PINQ_REC                ;PIN-Quittung wurde empfangen
+                mov     A, R2                   ;Status-Reg. in Akku laden
+                anl     A, #10000000b           ;(Phone-Line-Cond.) ausmask.
+                RL      A                       ;BIT7 -> BIT0 
+                cjne    A, #0, HANG_UP          ;falsche PIN -> auflegen!
+                jmp     READ_END                ;richtige PIN -> alles OK!
+;
+HANG_UP:        call    LOGOUT                  ;Ausstiegs-Sequenz einleiten
+                jmp     READ_END
+;
+READ_END:       pop     PSW                     ;PSW zurckschreiben
+                pop     ACC                     ;Akku-Wert zurckschreiben
+;
+                RET
+;
+;
+;****************************************************************************;
+                RSEG RXD_HS                     ;RXD-Frame Handshake
+;****************************************************************************;
+;Einschr„nkungen: Darf nur aus Interruptservice-Routine angesprungen werden,
+;                 da es Int. Kennzeichnungsflags abfragt !!!
+;Funktion:  * bernimmt das Empfangs-Handshake zur Gegenstation
+;           * schreibt empfangene Bytes mittels indirekter Adressierung
+;             in den Empfangsbuffer (Registerbank #3)
+;           * als Adressen-Speicher dient R0 der Registerbank 1
+;           * steht kein Timer fr den Ablauf zur Verfgung wird ein Kom-
+;             munikations-Error ausgel”st.
+;           * Timeout ber Teilframe-Empfang zur Verbindungsberwachung
+;           * berprft die Checksumme und meldet gegebenenfalls einen Fehler
+;             in Form eines RETCO 
+;           * daraufhin wird bis zu dreimal ein erneuter Empfang zugelassen;
+;             ist nach dem dritten mal keine gltige Checksumme empfangen
+;             worden wird ein NACK gesendet
+;
+RXD_FRAME:      %REGBANK(1)
+                push    ACC                     ;Akku-Wert sichern
+                push    PSW                     ;PSW (Reg.Bank) sichern
+                mov     A, SBUF                 ;berprfen ob Kommunikations
+                cjne    A, #RTR, COKORX         ;Anfrage vorliegt; sonst ERROR
+;
+                jb      TR0, EV_RX_T1           ;Timer-Busy-Check! (ev. T#1)
+                jmp     RXD_OK                  ;1 Timer frei -> alles OK !
+EV_RX_T1:       jb      TR1, COKORX             ;Timer1 auch busy -> Error!
+;
+RXD_OK:         clr     TI                      
+                mov     SBUF, #ACK              ;empfangsbereit !
+                jnb     TI, $                   ;warten bis fertig gesendet
+                mov     R0, #17H                ;Startadr. in R0 laden
+                mov     R1, #8                  ;Anz. der Teilframes festlegen
+                jmp     RX_READY
+COKORX:         jmp     CO_KO_RX                ;Kommunikationsfehler
+;
+RX_READY:       jb      TR0, TAKE_T1R           ;T#0-Busy-Check; ->Timer #1
+                %T0_INIT(-65000)
+                setb    RUN_XD_T0               ;T#0 fr šbertragung genommen
+                clr     RUN_XD_T1               ;sicher nicht Timer #1
+                clr     RI
+;
+                jmp     RXD_FRM
+;
+TAKE_T1R:       jb      TR1, CO_KO_RX           ;T#1-Busy-Check; ->CO_KO_RX
+                %T1_INIT(-65000)
+                setb    RUN_XD_T1               ;T#1 fr šbertragung genommen
+                clr     RUN_XD_T0               ;sicher nicht Timer #0
+                clr     RI                      ;RXD-Kennzeichnungsbit l”schen
+;
+RXD_FRM:        jb      RI,  REC_FRM            ;Teilframe empfangen ?
+                jb      RUN_XD_T1, ALSO_T1R     ;Auswahlabfrage: T#0/T#1
+;
+                jnb     TF0, RXD_FRM            ;T#0 abfragen, wenn dieser
+                clr     TR0                     ;gew„hlt wurde; Timer stoppen
+                clr     RUN_XD_T0
+                jmp     CO_KO_RX                ;-> Kommunikationsfehler
+;
+ALSO_T1R:       jnb     TF1, RXD_FRM            ;T#1 abfragen, wenn dieser
+                clr     TR1                     ;gew„hlt wurde; Timer stoppen
+                clr     RUN_XD_T1               ;
+                jmp     CO_KO_RX                ;-> Kommunikations-Fehler
+;
+REC_FRM:        clr     RI                      ;RXD-Kennzeichnungsbit l”schen
+                jnb     RUN_XD_T0, ERGO_T1R     ;Auswahlabfrage T#0/T#1
+;
+                clr     TR0                     ;T#0 wurde benutzt -> stoppen
+;
+                jmp     RECEIVE
+;
+ERGO_T1R:       clr     TR1                     ;T#1 wurde benutzt -> stoppen
+;
+RECEIVE:        inc     R0                      ;Adresse des aktuellen Reg.
+                mov     @R0, SBUF               ;Wert in aktuelles Register 
+                cjne    R1, #1, NO_RX_CS        ;Kontrolle ob Checksumme empf.
+;
+                                                ;Checksumme empfangen !
+                mov     R0, #17H                ;Adresse in R0
+                mov     R1, #7                  ;Checksumme ber 7 Bytes
+                clr     A                       ;Akku auf Null setzen (CHKSM)!
+RX_CHKSM:       inc     R0                      ;R0-R7 der RB3 adressieren
+                add     A, @R0                  ;Checksumme ber alle Teil-
+                djnz    R1, RX_CHKSM            ;Frames (7) berechnen
+;
+                cjne    A, 1FH, GO2RETRY        ;Checksumme mit R7 /RB3 vergl.
+                jmp     CO_OK_RX                ;Checksumme in Ordnung
+;
+NO_RX_CS:       dec     R1                      ;alle Teilframes auslesen
+                jmp     RX_READY
+;
+GO2RETRY:       djnz    R2, RETRY_CO            ;Retrys abgelaufen ? 
+                mov     R2, #RETRY_INI          ;Retry-Wert neu laden
+                jmp     CO_KO_RX                ;kein Retry mehr -> Fehler!
+;
+RETRY_CO:       clr     TI
+                mov     SBUF, #RETCO            ;RETRY senden bei inv. Chksum
+                jnb     TI, $ 
+                setb    RX_CO_ER                ;Kommunikationsfehler (kein
+                jmp     RXD_END                 ;Auslesen erlaubt!)
+;
+CO_KO_RX:       setb    RX_CO_ER                ;Kommunikationsfehler /Empfang
+                clr     TI
+                mov     SBUF, #NACK             ;Komm. Fehler melden
+                jnb     TI, $
+                jmp     RXD_END
+;
+CO_OK_RX:       clr     RX_CO_ER                ;kein Kommunikationsfehler
+                mov     R2, #RETRY_INI          ;wieder Startwert laden
+                clr     TI                      ;
+                mov     SBUF, #ACK              ;šbertragunng OK (Checksumme)
+                jnb     TI, $
+;
+                ;50ms Verz”gerung notwendig um unmittelbar gesendetes Zeichen 
+                ;nicht in gleichen Empf.buffer zu schreiben (Schnellantwort)
+;
+                jb      TR0, DELY_T1R           ;T#0-Busy-Check; ->Timer #1
+                %T0_INIT(-65000)
+;
+                jnb     TF0, $                  ;warten bis Zeit abgelaufen
+                clr     TR0                     ;Timer #0 stoppen
+;
+                jmp     RXD_END  
+;
+DELY_T1R:       %T1_INIT(-65000)                ;wenn ACK mind. 1 Timer frei !
+;
+                jnb     TF1, $                  ;warten bis Zeit abgelaufen
+                clr     TR1                     ;Timer #1 stoppen
+;
+RXD_END:        pop     PSW                     ;PSW (Reg.Bank) zurckschr.
+                pop     ACC                     ;Akku-Wert zurckschreiben
+                RET
+;
+;
+;****************************************************************************;
+                RSEG TXD_HS                     ;TXD-Frame Handshake
+;****************************************************************************;
+;Einschr„nkungen: Darf nur aus Interruptservice-Routine angesprungen werden,
+;                 da es Int. Kennzeichnungsflags abfragt !!!
+;Funktion:  * bernimmt das Sende-Handshake zur Gegenstation
+;           * liest zu sendende Bytes mittels indirekter Adressierung
+;             aus dem Sendebuffer (Registerbank #2) aus
+;           * als Adressen-Speicher dient R0 der Registerbank 1
+;           * steht kein Timer fr den Ablauf zur Verfgung wird ein Komm-
+;             unikations-Error ausgel”st.
+;           * es wird die Checksumme generiert
+;           * Timeout ber Empfang der Checksummen-Quittung
+;           * wird ein RETCO empfangen wird der gesamte Frame noch
+;             einmal gesendet
+;
+TXD_FRAME:      push    ACC                     ;Akku-Wert sichern
+                push    PSW                     ;PSW (Reg.Bank) sichern
+                %REGBANK(1)
+                mov     R0, #0FH                ;Startadr. fr Berechnung
+                mov     R1, #7                  ;Checksumme ber 7 Byte
+                clr     A                       ;Akku l”schen fr Addition
+CALC_CS:        inc     R0                      ;Teilframe -Adresse
+                add     A, @R0                  ;Teilframes aufaddieren
+                djnz    R1, CALC_CS             ;Checksumme fertig !
+                mov     17H, A                  ;Checksumme kopieren...
+;
+                mov     R0, #0FH                ;Startadr. fr Sendenbuffer
+                mov     R1, #8                  ;8 Teilframes senden
+;
+                jb      TR0, EV_TX_T1           ;Timer-Busy-Check! (ev. T#1)
+                jmp     TXD_OK                  ;1 Timer frei -> alles OK !
+EV_TX_T1:       jb      TR1, COKOTX             ;Timer1 auch busy -> Error!
+;
+TXD_OK:         clr     TI
+                mov     SBUF, #RTR              ;RTR senden
+                jnb     TI, $ 
+                jmp     RTRCS_TO                ;Anforderung einer TO-Abfrage
+;
+COKOTX:         jmp     CO_KO_TX                
+;
+FRM_SEND:       clr     TI
+                inc     R0                      ;auf aktuelles Reg. zeigen
+                mov     SBUF, @R0               ;aktuelles Reg. senden
+                jnb     TI, $                   ;warten bis Byte gesendet
+                djnz    R1, FRM_SEND            ;Checksumme gesendet ?
+;                
+                setb    CS_Q_REC                ;CS-Quittung wird erwartet
+;
+;                                               ;Timeout-Abfrage
+RTRCS_TO:       jb      TR0, TAKE_T1T           ;Timer#0-Busy-Check; sonst T#1
+                %T0_INIT(-65000)                ;50ms Timeout fr ID-Empfang
+                setb    RUN_XD_T0               ;T#0 fr šbertragung genommen
+                clr     RUN_XD_T1               ;Timer #1 sicher nicht
+                clr     RI                      ;RXD-Kennzeichnungsbit l”schen
+;
+                jmp     TXD_FRM
+;
+TAKE_T1T:       jb      TR1, CO_KO_TX           ;T#1-Busy-Check; ->CO_KO_TX
+                %T1_INIT(-65000)
+                setb    RUN_XD_T1               ;T#1 fr šbertragung genommen
+                clr     RUN_XD_T0               ;Timer #0 sicher nicht
+                clr     RI                      ;RXD-Kennzeichnungsbit l”schen
+;
+TXD_FRM:        jb      RI,  TRA_FRM            ;Sendefreigabe erhalten ?
+                jnb     RUN_XD_T0, ALSO_T1T     ;Auswertentscheidung: T#0/T#1 
+;                                                
+                jnb     TF0, TXD_FRM            ;T#0 abfragen, wenn dieser
+                clr     TR0                     ;gew„hlt wurde
+                clr     RUN_XD_T0
+                jmp     CO_KO_TX                ;-> Kommunikationsfehler
+;
+ALSO_T1T:       jnb     TF1, TXD_FRM            ;T#1 abfragen, wenn dieser
+                clr     TR1                     ;gew„hlt wurde
+                clr     RUN_XD_T1               ;
+                jmp     CO_KO_TX                ;-> Kommunikations-Fehler
+;
+TRA_FRM:        clr     RI                      ;RXD-Kennzeichnungsbit l”schen
+                jnb     RUN_XD_T0, ERGO_T1T     ;Auswahlabfrage T#0/T#1
+;
+                clr     TR0                     ;T#0 wurde benutzt
+;
+                jmp     SEND
+;
+ERGO_T1T:       clr     TR1                     ;T#1 wurde benutzt
+;
+SEND:           mov     A, SBUF                 ;empf. Zeichen aus SBUF holen
+                jb      CS_Q_REC, TX_CHKSM      ;Checksummen-Quittung empf.
+                                                ;also RTR-Quittung empfangen
+                cjne    A, #ACK, CO_KO_TX       ;wurde ein ACK empfangen ?
+                jmp     FRM_SEND                ;Frame senden starten
+;
+                                                ;...Checksumme empfangen
+TX_CHKSM:       clr     CS_Q_REC                  
+                cjne    A, #ACK, REC_RETCO      ;Checksumme korrekt ?
+                jmp     CO_OK_TX                ;alles in Ordnung !
+;
+REC_RETCO:      cjne    A, #RETCO, CO_KO_TX     ;Retry-Auftrag erhalten ?
+                djnz    R3, TXDFRAME            ;ges. šbertragung wiederholen
+                mov     R3, RETRY_INI           ;Retry-Zahl resitieren
+                jmp     CO_KO_TX                ;Komm. Fehler da Retrys vorbei
+;
+TXDFRAME:       jmp     TXD_FRAME
+;
+CO_OK_TX:       clr     TX_CO_ER                ;Komm.-Fehlerbit l”schen
+                jmp     TXD_END
+;
+CO_KO_TX:       setb    TX_CO_ER                ;Komm.-Fehler aufgetreten
+                jmp     TXD_END 
+;
+;
+TXD_END:        pop     PSW                     ;PSW (Reg.Bank) zurckschr.
+                pop     ACC                     ;Akku-Wert zurckschreiben
+                RET
+;
+;
+;****************************************************************************;
+                RSEG RINGMNGR                   ;Ring-Schnittstellen - Manager
+;****************************************************************************;
+;Einschr„nkungen: keine
+;Funktion:  * manipuliert den Akku-Inhalt
+;           * bernimmt das Handshake zur Amtsleitung
+;
+; 1 __    __    __    __    ______________________    __    __    __    ____  
+; 0   |__|  |__|  |__|  |__|                      |__|  |__|  |__|  |__|      
+;     |                    |                      |                    |      
+;     |     1x l„uten      |    Pause (>65ms)     |     1x l„uten      |      
+;     |<------------------>|<-------------------->|<------------------>|      
+;                                                                             
+;           * fordert aktuelle PUN von POS an; keine Antwort: Default-PUN
+;           * ein Abheben einer anderen Nebenstelle wird dadurch erkannt, daá
+;             ein Timout vor Erreichen der PUN anspricht
+;           * nach dem Abheben muá innerhalb eines weiteren Timouts ein DTMF-
+;             Ton erkannt werden. Andernfalls legt das POI wieder auf
+;           * wird ein DTMF-Ton erkannt wird dieser bereits an den PINMNGR
+;             weiter geleitet
+;
+RINGING:        %REGBANK(0)                     ;Registerbank 0 w„hlen
+;
+                ;...PUN anfordern: Antwort kommt sicher vor ersten "dec R0"
+                %REGBANK(0)
+                mov     R0, #DEF_PUN            ;Default-Wert der PUN zuweisen
+                %WP2_WRITE(ID_PUN_A, POS0_ADR, 0, 0, 0, 0)
+;
+                mov     R1, #20                 ;Warten auf PUN - Daten
+WAIT4PUN:       %T0_INIT(-50000)                ;1s - Timeout
+                jnb     TF0, $
+                djnz    R1, WAIT4PUN
+;
+;-------------------------- L„ut-Auswertung /BEGINN --------------------------
+RESETTIM:       %T0_INIT(-50000)                ;Timout-Timer starten
+                mov     R1, #RPU_TIME           ;Default-Zeit fr fremdes Abh.
+RUFTON:         jnb     RING, RESETTIM          ;L„uten -> T#0 neu aufsetzen
+                jnb     TF0, RUFTON             ;warten bis ges. L„uten beend.
+;
+                djnz    R0, RPU_TO              ;-> Remote-Pickup - Timeout
+                jmp     ON_LINE                 ;Pick-Up einleiten
+;
+RPU_TO:         %T0_INIT(-50000)                ;TO f. fremdes Abheben
+WAIT4RUF:       jnb     RING, RUFTON            ;erneutes L„uten -> auswerten
+                jnb     TF0, WAIT4RUF           ;warten auf erneutes L„uten        
+;
+                djnz    R1, RPU_TO              ;andere Nebenstelle hat abge-
+                jmp     OFF_LINE                ;hoben
+;--------------------------- L„ut-Auswertung /ENDE ---------------------------
+;
+;
+ON_LINE:        clr     NEWUSER                 ;val. DTMF-Ton -> neuer User
+                clr     HOOK                    ;Abheben
+;
+                mov     R0, #REACT_TO           ;Timeout fr Reaktion des User
+WAIT4REA:       %T0_INIT(-50000)
+                jnb     TF0, $
+;
+                setb    EA                      ;alle Interrupts freigeben
+                setb    EX0                     ;DTMF-Empfang erm”glichen
+;
+                jb      NEWUSER, RING_END       ;DTMF-Ton empf. ->Ring-Manager
+                djnz    R0, WAIT4REA
+;
+;
+OFF_LINE:       call    LOGOUT                  ;Ausstiegs-Sequenz einleiten
+;
+RING_END:       RET
+;
+;
+;****************************************************************************;
+                RSEG PINMNGR                    ;PIN-Check - Manager
+;****************************************************************************;
+;Einschr„nkungen: keine
+;Funktion:  * manipuliert den Akku-Inhalt
+;           * nimmt den 4 stelligen PIN-Code auf
+;           * um fest zu stellen ob ein neues PIN-Zeichen eingelesen wurde,
+;             wird das Register Nr.4/RB1 auf $FF gesetzt.
+;           * die eingelesene PIN wird indirekt indiziert gespeichert und auf
+;             SVC (Supervisor-Code), EMC (Emergency-Code) oder USC (User-Code)
+;             berprft.
+;           * Reactions:
+;              SVC: - Abbruch der seriellen Kommunikation
+;                   - Aufheben der Sperre durch die Tastenkombination: # 0
+;                   - Zugang wird genehmigt
+;                   - keine Spracherkennung m”glich
+;              EMC: - keine Verifizierung durch das POS
+;                   - serielle Verbindung bleibt erhalten
+;                   - Zugang wird genehigt
+;                   - keine Spracherkennung m”glich
+;              USC: - šberprfung durch POS
+;                   - serielle Verbindung bleibt erhalten
+;                   - Zugang wird genehigt
+;                   - PIN symbolisiert Spracherkennungs-Profil 
+;
+PINCHECK:       %REGBANK(0)
+                mov     R2, #PIN_TO             ;Zeit fr PIN-Eingabe
+                mov     R3, #4                  ;PIN ist vierstellig
+;                       
+                mov     R0, #PIN                ;Adresse des PIN-Speichers
+                mov     A, B                    ;1. DTMF-Zahl auslesen in Akku
+                mov     @R0, A                  ;Zahl auf PIN-Array [0]
+                mov     B, #0FFH                ;bereit fr neue Zahl
+                dec     R3                      ;nur mehr drei Zahlen f. PIN
+;
+;
+WAIT4PIN:       %T0_INIT(-50000)                ;Timeout f. Pin-Eingabe 
+                jnb     TF0, $
+;
+                mov     A, B                    ;DTMF-Zahl auslesen in Akku
+                cjne    A, #0FFH, NEW_PIN       ;neue PIN - Zahl
+                jmp     NO_PIN                  ;keine neue PIN - Zahl
+;
+NEW_PIN:        inc     R0                      ;n„chster Idx des PIN-Speicher
+                mov     @R0, A                  ;Zahl auf PIN-Array [0]
+                mov     B, #0FFH                ;bereit fr neue Zahl
+                djnz    R3, WAIT4PIN            ;alle PIN-Zahlen eingelesen
+                jmp     FULL_PIN                ;vollst„ndige PIN auswerten
+;
+NO_PIN:         djnz    R2, WAIT4PIN            ;realtiver Sprung zu kurz
+                jmp     INV_PIN
+;
+;------------------- Kontrolle ob Supervisor-Code /BEGINN --------------------
+FULL_PIN:       mov     R0, #PIN                ;Adresse des 1. Digit in R0
+                mov     A, @R0                  ;1. Digit der PIN in Akku
+                cjne    A, #SVC1DIG, EMC_CHK    ;1. Digit auf Validit„t testen
+;
+                mov     R0, #PIN+1              ;Adresse des 2. Digit in R0
+                mov     A, @R0                  ;2. Digit der PIN in Akku
+                cjne    A, #SVC2DIG, EMC_CHK    ;2. Digit auf Validit„t testen
+;
+                mov     R0, #PIN+2              ;Adresse des 3. Digit in R0
+                mov     A, @R0                  ;3. Digit der PIN in Akku
+                cjne    A, #SVC3DIG, EMC_CHK    ;3. Digit auf Validit„t testen
+;
+                mov     R0, #PIN+3              ;Adresse des 4. Digit in R0
+                mov     A, @R0                  ;4. Digit der PIN in Akku
+                cjne    A, #SVC4DIG, EMC_CHK    ;4. Digit auf Validit„t testen
+;-------------------- Kontrolle ob Supervisor-Code /ENDE ---------------------
+;
+                ;...Reaktion auf gltigen Supervisor-Code
+                clr     REN                     ;serielle Verbindung abbrechen
+                clr     ES
+                setb    SVC_ON                  ;SVC wurde verwendet
+                jmp     VAL_PIN                 ;neuer Supervisor angemeldet
+;
+;
+;-------------------- Kontrolle ob Emergency-Code /BEGINN --------------------
+EMC_CHK:        mov     R0, #PIN                ;Adresse des 1. Digit in R0
+                mov     A, @R0                  ;1. Digit der PIN in Akku
+                cjne    A, #EMC1DIG, USC_CHK    ;1. Digit auf Validit„t testen
+;
+                mov     R0, #PIN+1              ;Adresse des 2. Digit in R0
+                mov     A, @R0                  ;2. Digit der PIN in Akku
+                cjne    A, #EMC2DIG, USC_CHK    ;2. Digit auf Validit„t testen
+;
+                mov     R0, #PIN+2              ;Adresse des 3. Digit in R0
+                mov     A, @R0                  ;3. Digit der PIN in Akku
+                cjne    A, #EMC3DIG, USC_CHK    ;3. Digit auf Validit„t testen
+;
+                mov     R0, #PIN+3              ;Adresse des 4. Digit in R0
+                mov     A, @R0                  ;4. Digit der PIN in Akku
+                cjne    A, #EMC4DIG, USC_CHK    ;4. Digit auf Validit„t testen
+;--------------------- Kontrolle ob Emergency-Code /ENDE ---------------------
+;                
+                ;...Reaktion auf gltigen Emergency-Code
+                setb    EMC_ON                  ;EMC wurde verwendet
+                jmp     VAL_PIN                 ;Emergency-Zugang genehmigt
+;
+;
+;---------------------- Kontrolle ob User-Code /BEGINN -----------------------
+USC_CHK:        ;Verifizierung durch POS
+                %WP2_WRITE(ID_PIN_A, POS0_ADR, 0, 0, 0, 0)
+;----------------------- Kontrolle ob User-Code /ENDE ------------------------
+;
+                mov     R2, #REPLY_TO           ;Antwort-Timeout
+W4PINREP:       %T0_INIT(-50000)                ;auf Antwort warten
+                jnb     TF0, $
+                jbc     PINQ_REC, VAL_PINQ      ;wurde PIN-Quittung empf. ?
+                djnz    R2, W4PINREP            ;Timeout-Abfrage
+                jmp     INV_PIN                 ;nichts empfangen -> auflegen
+VAL_PINQ:       jb      HOOK, INV_PIN           ;wurde aufgelegt ?
+;
+                ;...Reaktion auf gltigen User-Code
+                setb    USC_ON                  ;USC wurde verwendet
+;
+;
+VAL_PIN:        setb    NEWUSER
+                jmp     PINC_END
+;
+INV_PIN:        call    LOGOUT                  ;Ausstiegs-Sequenz einleiten
+;
+PINC_END:       RET
+;
+;
+;****************************************************************************;
+                RSEG USC_SERV                   ;Service fr den User
+;****************************************************************************;
+;Einschr„nkungen: keine
+;Funktion:  * manipuliert den Akku-Inhalt
+;           * verarbeitet DTMF-Eingaben des eingeloggten Users
+;           * Timeout-šberwachung bis zum n„chsten Tastendruck
+;           * Timeout-šberwachung ist inaktiv wenn SRU aktiv ist !und! die
+;             Verbindung zum POS aufgebaut ist
+;           * Wenn SVC oder EMC aktiv ist kann die Spracherkennung nicht
+;             aktiviert werden
+;           * Tasten:
+;                    - 1-4...Ansteuerung der RELCOs Nr.1 - 4 (Toggelung)
+;                    -   5...Spracherkennung (Toggelung)
+;                    -   *...Saftey-Cutoff einleiten
+;                    -   #...umschalten zur Sonderfunktionstasten-Ebene
+;                    -  #0...Supervisor-Komm.-Sperre wird aufgehoben
+;                    -  #1...manuelles Auflegen einleiten
+;                    -  #2...POS-Reset ber serielle Kommunikation einleiten
+;                    -  #3...wie #2 aber nach ca. 30 wird RELCO #3 kompl.
+;                            und erneut nach ca. 10s komplementiert 
+;
+SERVICE:        %REGBANK(0)
+                mov     B, #0FFH                ;bereit fr neue Zahl
+;                
+STAND_BY:       mov     R2, #KEY_TO             ;Tastendruck-Timeout setzen
+WAIT4KEY:       %T0_INIT(-50000)
+                jnb     TF0, $
+;
+                mov     A, B                    ;DTMF-Zahl auslesen in Akku
+                cjne    A, #0FFH, NEW_KEY       ;neue PIN - Zahl
+;
+                jnb     SRU, NORM_TO            ;SRU inaktiv -> norm. TO-Sequ.
+                jnb     RX_CO_ER, STAND_BY      ;aktive Verb. zum POS ?
+;
+NORM_TO:        djnz    R2, WAIT4KEY            ;auf Tastendruck warten
+                jmp     EXITSERV                ;Zeit fr Eingabe abgelaufen
+;
+;
+;
+NEW_KEY:        cjne    A, #HESCH, KE_HESCH     ;Taste: # gedrckt ?
+                mov     B, #0FFH                ;bereit fr neue Zahl
+;
+                mov     R2, #SKEY_TO            ;Timeout fr Sondertaste
+W4SKEY:         %T0_INIT(-50000)
+                jnb     TF0, $
+;
+                mov     A, B                    ;DTMF-Zahl auslesen in Akku
+                cjne    A, #0FFH, NEW_SKEY      ;neue PIN - Zahl (Sondertaste)
+;
+                djnz    R2, W4SKEY              ;auf Sondertaste warten
+                jmp     SERVICE                 ;# und Zahl verwerfen
+;
+KE_HESCH:       jmp     SCO                     ;keine Sondertaste
+;
+;---------------------- Sondertasten - Handling /BEGINN ----------------------
+NEW_SKEY:       jnb     SVC_ON, SK_1            ;SVC aktiv ? -> 0 auswerten
+;
+                cjne    A, #NULL, SK_1          ;wurde die 0 gedrckt
+                call    EIN_TON                 ;Einschalt-Ton aktivieren
+                setb    REN                     ;serielle Kommunikation re-
+                setb    ES                      ;aktivieren
+                jmp     SERVICE                 ;bereit fr neue Eingabe
+;
+SK_1:           cjne    A, #1, SK_2             ;wurde die 1 gedrckt
+                call    AUS_TON                 ;Ausschalt-Ton einschalten
+                jmp     EXITSERV                ;manuelles Auflegen
+;
+SK_2:           cjne    A, #2, SK_3             ;wurde die 2 gedrckt
+                call    AUS_TON                 ;Ausschalt-Ton einschalten
+                setb    POSRESET                ;POS-Reset einleiten (Status)
+                jmp     SERVICE                 ;bereit fr neue Eingabe
+;
+SK_3:           cjne    A, #3, SK_DONE          ;wurde die 3 gedrckt
+                setb    POSRESET                ;POS-Reset einleiten (Status)
+;
+                mov     R3, #3                  ;3 facher Wert f. Verz”gerung
+W4CUTOFF:       mov     R2, #OFF_DEL            ;Ausschaltverz”gerung setzen
+;
+OFF_CYCL:       %T0_INIT(-50000)
+                jnb     TF0, $
+;
+                jb      POSRESET, NO_SUSP       ;warten bis POSReset angenomm.
+                clr     REN                     ;serielle Verbindung abbrechen
+                clr     ES
+;                
+NO_SUSP:        djnz    R2, OFF_CYCL            ;Verz”gerung abwarten
+;
+                djnz    R3, W4CUTOFF            ;Verz”gerung abwarten
+                cpl     REL_CO3                 ;Hardware auschalten
+                call    AUS_TON                 ;Ausschalt-Ton einschalten
+;
+                mov     R2, #ON_DEL             ;Einschaltverz”gerung setzen
+W4POWER:        %T0_INIT(-50000)
+                jnb     TF0, $
+                djnz    R2, W4POWER                    
+;
+                cpl     REL_CO3                 ;Hardware wieder einschalten
+                call    EIN_TON                 ;Einschalt-Ton aktivieren
+                setb    REN                     ;serielle Kommunikation re-
+                setb    ES                      ;aktivieren
+;
+SK_DONE:        jmp     SERVICE                 ;bereit fr neue Eingabe
+;----------------------- Sondertasten - Handling /ENDE -----------------------
+;
+;
+;---------------------- Normaltasten - Handling /BEGINN ----------------------
+SCO:            cjne    A, #STERN, K_1          ;Safety-Cut-Off aktivieren ?
+                orl     P1, #00001111b          ;RELCOs auf Power-Up - Zustand
+                setb    SAFECO                  ;Saftey-Cut-Off wurde aktiv.
+                call    AUS_TON                 ;Ausschalt-Ton aktivieren
+                jmp     SERVICE                 ;bereit fr neue Eingabe
+;
+;
+K_1:            cjne    A, #1, K_2              ;wurde die 1 gedrckt ?
+                cpl     REL_CO1                 ;Device Nr.1 komplementieren
+                clr     SAFECO                  ;Safety-Cut-Off wieder inaktiv
+                jb      REL_CO1, RELCO1_A       ;wurde aus od. eingeschaltet ?
+;
+                call    EIN_TON                 ;Einschalt-Ton aktivieren
+                jmp     SERVICE                 ;bereit fr neue Eingabe
+;
+RELCO1_A:       call    AUS_TON                 ;Ausschalt-Ton aktivieren
+                jmp     SERVICE                 ;bereit fr neue Eingabe
+;
+;
+K_2:            cjne    A, #2, K_3              ;wurde die 2 gedrckt ?
+                cpl     REL_CO2                 ;Device Nr.2 komplementieren
+                clr     SAFECO                  ;Safety-Cut-Off wieder inaktiv
+                jb      REL_CO2, RELCO2_A       ;wurde aus od. eingeschaltet ?
+;
+                call    EIN_TON                 ;Einschalt-Ton aktivieren
+                jmp     SERVICE                 ;bereit fr neue Eingabe
+;
+RELCO2_A:       call    AUS_TON                 ;Ausschalt-Ton aktivieren
+                jmp     SERVICE                 ;bereit fr neue Eingabe
+;
+;
+K_3:            cjne    A, #3, K_4              ;wurde die 3 gedrckt ?
+                cpl     REL_CO3                 ;Device Nr.3 komplementieren
+                clr     SAFECO                  ;Safety-Cut-Off wieder inaktiv
+                jb      REL_CO3, RELCO3_A       ;wurde aus od. eingeschaltet ?
+;
+                call    EIN_TON                 ;Einschalt-Ton aktivieren
+                jmp     SERVICE                 ;bereit fr neue Eingabe
+;
+RELCO3_A:       call    AUS_TON                 ;Ausschalt-Ton aktivieren
+                jmp     SERVICE                 ;bereit fr neue Eingabe
+;
+;
+K_4:            cjne    A, #4, K_5              ;wurde die 4 gedrckt ?
+                cpl     REL_CO4                 ;Device Nr.4 komplementieren
+                clr     SAFECO                  ;Safety-Cut-Off wieder inaktiv
+                jb      REL_CO4, RELCO4_A       ;wurde aus od. eingeschaltet ?
+;
+                call    EIN_TON                 ;Einschalt-Ton aktivieren
+                jmp     SERVICE                 ;bereit fr neue Eingabe
+;
+RELCO4_A:       call    AUS_TON                 ;Ausschalt-Ton aktivieren
+                jmp     SERVICE                 ;bereit fr neue Eingabe
+;
+;
+K_5:            cjne    A, #5, SRU_A            ;wurde die 5 gedrckt ?
+                jnb     USC_ON, SRU_A           ;SRU Aktivierung nur mit USC
+                cpl     SRU                     ;Speech Reco.  komplementieren
+                jnb     SRU, SRU_A              ;wurde aus od. eingeschaltet ?
+;
+                call    EIN_TON                 ;Einschalt-Ton aktivieren
+                jmp     SERVICE                 ;bereit fr neue Eingabe
+;
+SRU_A:          call    AUS_TON                 ;Ausschalt-Ton aktivieren
+                jmp     SERVICE                 ;bereit fr neue Eingabe
+;----------------------- Noramltasten - Handling /ENDE -----------------------
+;
+;
+EXITSERV:       call    LOGOUT                  ;Ausstiegs-Sequenz einleiten
+;
+                RET
+;
+;****************************************************************************;
+                RSEG    EIN_TRIG                ;Einschalt-Ton - Ansteuerung
+;****************************************************************************;
+;Einschr„nkungen: keine
+;Funktion:  * triggert das Monoflop mit der Frequenz fr das Einschalten
+;           * sorgt fr die Interruptausblendung w„hrend der šberlagerung des
+;             DTMF-Tons, mit dem des Monoflops und setzt IE0 nach Beendigung
+;             des Signaltons zurck und gibt ext. Interrupt wieder frei
+;
+EIN_TON:        %REGBANK(0)
+                clr     REN                     ;serielle Verbindung abbrechen
+                clr     EA                      ;Interrupts sperren (Timer)
+                clr     MF_EIN                  ;Monoflop triggern
+                %T0_INIT(-50000)
+                jnb     TF0, $
+                setb    MF_EIN                  ;Triggerimpuls fertig
+;
+                mov     R3, #FADE_OUT           ;Ausblendzeit setzen
+FADING_E:       %T0_INIT(-50000)
+                jnb     TF0, $
+                djnz    R3, FADING_E            ;Ausblendzeit abgelaufen ?
+;
+                clr     IE0                     ;Kennzeichnungsbit rcksetzen
+                setb    REN                     ;Interrupts wieder freigeben
+                setb    EA                      ;ser. Kommunikation reaktiv.
+;
+                RET
+;
+;
+;****************************************************************************;
+                RSEG    AUS_TRIG                ;Ausschalt-Ton - Ansteuerung
+;****************************************************************************;
+;Einschr„nkungen: keine
+;Funktion:  * triggert das Monoflop mit der Frequenz fr das Ausschalten
+;           * sorgt fr die Interruptausblendung w„hrend der šberlagerung des
+;             DTMF-Tons, mit dem des Monoflops und setzt IE0 nach Beendigung
+;             des Signaltons zurck und gibt ext. Interrupt wieder frei
+;
+AUS_TON:        %REGBANK(0)
+                clr     REN                     ;serielle Verbindung abbrechen
+                clr     EA                      ;Interrupts sperren (Timer)
+                clr     MF_AUS                  ;Monoflop triggern
+                %T0_INIT(-50000)
+                jnb     TF0, $
+                setb    MF_AUS                  ;Triggerimpuls fertig
+;
+                mov     R3, #FADE_OUT           ;Ausblendzeit setzen
+FADING_A:       %T0_INIT(-50000)
+                jnb     TF0, $
+                djnz    R3, FADING_A            ;Ausblendzeit abgelaufen ?
+;
+                clr     IE0                     ;Kennzeichnungsbit rcksetzen
+                setb    REN                     ;Interrupts wieder freigeben
+                setb    EA                      ;ser. Kommunikation reaktiv.
+;
+                RET
+;
+;
+;****************************************************************************;
+                RSEG    EXIT_SEQ                ;Ausstiegs-Sequenz
+;****************************************************************************;
+;Einschr„nkungen: keine
+;Funktion:  * leitet ein definierte Logout-Sequenz ein
+;
+LOGOUT:         setb    HOOK                    ;auflegen
+                clr     NEWUSER                 ;User abmelden
+                clr     SRU                     ;Spracherkennung deaktivieren
+                setb    REN                     ;serielle Kommunikation re-
+                setb    ES                      ;aktivieren (falls inaktiv)
+                clr     SVC_ON                  ;Zutritts-Code zurcksetzen
+                clr     EMC_ON                  ;Zutritts-Code zurcksetzen
+                clr     USC_ON                  ;Zutritts-Code zurcksetzen
+;
+                RET
+;
+;
+;****************************************************************************;
+                RSEG HAUPTPRG                   ;Hauptprogramm
+;****************************************************************************;
+;
+INIT:           clr     EA                      ;alle Interrupts sperren
+                mov     SP, #?Stack-1           ;Stackpointer positionieren
+;                                                
+;Flags resitieren...
+                clr     RX_CO_ER
+                clr     POSRESET       
+                clr     SAFECO         
+                clr     SRU           
+                clr     TX_CO_ER       
+                clr     RUN_XD_T0      
+                clr     RUN_XD_T1      
+                clr     CS_Q_REC         
+                clr     NEWUSER        
+                clr     DTMF_FL        
+                clr     PINQ_REC
+                clr     SVC_ON         
+                clr     EMC_ON         
+                clr     USC_ON         
+                clr     FLAG16         
+                clr     FLAG17         
+                clr     FLAG18         
+                clr     FLAG19         
+                clr     FLAG20         
+;Parametrierungen...
+                orl     P1, #11000000b          ;Ring-bereit und auflegen
+                %REGBANK(1)
+                mov     R2, #RETRY_INI          ;Startwert fr Retrys (Empf.)
+                mov     R3, #RETRY_INI          ;Startwert fr Retrys (Send.)
+                %REGBANK(0)
+;
+;
+;Timer #0 initialisieren...
+                anl     TMOD, #11110000b        ;Timer; TR gesteuert;
+                orl     TMOD, #00000001b        ;Mode1 (16Bit-Timer)
+                anl     TCON, #11001110b        ;T#0 stoppen und TF0 l”schen
+                orl     TCON, #00000001b        ;/INT0 ist flankensensitiv
+                clr     ET0                     ;Sperre des T#0 - Interrupts
+;
+;Timer #1 initialisieren...
+                anl     TMOD, #00001111b        ;Timer; TR gesteuert;
+                orl     TMOD, #00010000b        ;Mode1 (16Bit-Timer)
+                anl     TCON, #00111110b        ;T#1 stoppen und TF1 l”schen
+                orl     TCON, #00000001b        ;/INT0 ist flankensensitiv
+                clr     ET1                     ;Sperre des T#1 - Interrupts
+;
+;serielle Schnittstelle initialisieren:
+;19200 Baud / 1Startbit / 8Daten / 1Stopbit / kein Parity
+                anl     T2CON, #00000000b       ;T2CON l”schen
+                setb    RCLK                    ;Timer#2 wird als Baudraten-
+                setb    TCLK                    ;generator verwendet
+                mov     RCAP2H, #HIGH(65518)    ;Baudrate := 19200 (FFh)
+                mov     RCAP2L, #LOW(65518)     ;Baudrate := 19200 (EEh)
+                                                ;nichts in TL2, TH2 schreiben!
+                clr     RI                      ;RXD-Kennzeichnungsbit l”schen
+                clr     TI                      ;TXD-Kennzeichnungsbit l”schen
+                clr     SM0                     ;Mode 1 (8bit UART)
+                setb    SM1                     ;Mode 1 (8bit UART)
+                setb    TR2                     ;Timer#2 starten                        
+;
+                mov     R0, #40                 ;2s Wartezeit auf Port-Init
+PORTINIT:       %T0_INIT(-50000)                
+                jnb     TF0, $
+                djnz    R0, PORTINIT
+;
+                setb    REN                     ;Empfangsfreigabe aktiviern
+                setb    ES                      ;seriellen Interrupt freigeben
+                setb    EA                      ;Interrupts freigeben
+;
+;
+;-------------- Schrittschaltwerk des Hauptprogramms /BEGINN -----------------
+WAIT4JOB:       jb      RING, $                 ;auf Rufton warten
+                call    RINGING                 ;Rufton Handshake
+;
+                jnb     NEWUSER, WAIT4JOB       ;Verbindungsabruch ->neuer Job
+                call    PINCHECK                ;PIN berprfen
+;                
+                jnb     NEWUSER, WAIT4JOB       ;Verbindungsabruch ->neuer Job
+                call    SERVICE                 ;User-Service
+;
+                jmp     WAIT4JOB                ;auf n„chsten Anruf warten
+;--------------- Schrittschaltwerk des Hauptprogramms /ENDE ------------------
+;
+;
+;****************************************************************************;
+                RSEG    INTSERV                 ;Interruptserviceroutine
+;****************************************************************************;
+IS_DTMF:        clr     EA                      ;alle Interrupts sperren
+                setb    DTMF_FL                 ;DTMF-Interrupt ausgl”st
+IS_BEG:         clr     EA                      ;alle Interrupts sperren
+                push    ACC                     ;Akku-Inhalt sichern
+                push    PSW                     ;u. a. Reg.-Bank sichern
+;
+;---------------- DTMF-States zur DTMF-Ton-Auswertung /BEGINN ----------------
+                jbc     DTMF_FL,DTMF_INT        ;externer DTMF-Interrupt?
+                jmp     ST_RXD
+;
+DTMF_INT:       setb    NEWUSER                 ;neuer User -> Ring-Manager
+;
+                mov     DPTR, #DTMF_DEC         ;Adresse des DTMF-Dekoders
+                movx    A, @DPTR                ;DTMF-Daten von Datenbus holen
+                anl     A, #00001111b           ;High-Nibble ausmakieren
+                mov     B, A                    ;DTMF-Zahl in Reg. B sichern
+;                        
+                jmp     IS_END
+;----------------- DTMF-States zur DTMF-Ton-Auswertung /ENDE -----------------
+;
+;
+;------------ Empfangs-States der seriellen Kommunikation /BEGINN ------------
+ST_RXD:         jb      RI, RXD_INT             ;RXD-INT? -> Auswertung
+                jmp     ST_TXD                  ;sonst n„chster State
+;
+RXD_INT:        call    RXD_FRAME
+                jnb     RX_CO_ER, RD_PROC       ;liegt ein Komm. fehler vor ?
+                jmp     EXIT_RXD                ;ja -> Abbruch 
+;
+RD_PROC:        call    WP2_READ                ;Empfangsbuffer auslesen        
+                jb      QA_STS_A, QA            ;Schnellantwort /Status notw.?
+                jmp     IS_END
+;
+QA:                                             ;Status-Transfer nach Anfrage
+                %WP2_WRITE(ID_STS_D, 0, 0, 0, 0, 0)
+                jmp     ST_TXD                  ;in den Sende-State springen
+;
+EXIT_RXD:       jmp     IS_END
+;------------- Empfangs-States der seriellen Kommunikation /ENDE -------------
+;
+;
+;-------------- Sende-States der seriellen Kommunikation /BEGINN -------------
+ST_TXD:         jb     TI, TXD_INT              ;TXD-INT? -> Auswertung
+                jmp    IS_END                   ;Ende der Int.-Serviceroutine
+;
+TXD_INT:        jnb     QA_STS_A, TD_PROC       ;Schnellantwort absetzen
+                clr     QA_STS_A
+TD_PROC:        call    TXD_FRAME               ;Sendeframe - Handshake
+                jmp     IS_END
+;--------------- Sende-States der seriellen Kommunikation /ENDE --------------
+;
+;
+IS_END:         pop     PSW
+                pop     ACC
+                clr     TI                      ;Transmit Int. Flag l”schen
+                clr     RI                      ;Receive Int. Flag l”schen
+                setb    ea
+                reti
+;
+                END                             ;eof - POI.src

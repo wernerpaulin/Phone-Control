@@ -1,0 +1,22 @@
+Die DD-Version  (8051: RISM51DD.SRC) des Intel-Monitors (PC: IECM51.EXE)
+unterstuetzt sowohl ein LCD-Display (Adr: 0FC00h) und den Programmststart aus
+einem batteriegepufferten RAM (Adr: 08000h).
+(P5.3 = LOW ... Ram-Start   HIGH ... Monitor-Start)
+Sie ist fuer einen 80535 ausgelegt.
+
+Pinbelegung:
+  P5.0 bis P5.2...diverse Taster (auf GND)
+  P5.3............Schalter fÅr Programm laden / Programm benuetzen
+  P5.4............Piezosummer ohne Elektronik (auf +Ub)
+  P5.5 bis P5.7...verschiedenfaerbige Leds (auf +Ub)
+
+Serielle Belegung (bezieht sich auf 9 poligen Stecker):
+  DCD(1), DSR(6) & DTR(4) verbinden und ueber Empfangstreiber, einen Inverter
+          und einer Diode in Richtung Inverter mit /RESET verbinden
+  RXD(2/3) ueber Empfangstreiber (z.B. MAX232) mit P3.0 verbinden
+  TXD(3/2) ueber Sendetreibertreiber mit P3.1 verbinden
+  RTS(7) und CTS(8) verbinden
+  GND(5) mit Schaltungsmasse verbinden
+  RI(9) ueber Sendetreiber mit P5.4 (Piezosummer) verbinden
+
+  Hinweis: RXD/TXD-Belegung je nach Verbindungskabel waehlen !!!!

@@ -1,0 +1,10 @@
+ RL51                                                                 PAGE   1
+
+
+DATE : 02/05/:7
+DOS 6.22 (038-N) MCS-51 RELOCATOR AND LINKER V3.1, INVOKED BY:
+C:\RND\ASM\RL51.EXE TEMR.OBJ
+
+- FATAL ERROR 210:  I/O ERROR, INPUT FILE; 
+  UDI ERROR:  Exception: 0021H File Does Not Exist
+  FILE:  TEMR.OBJ 

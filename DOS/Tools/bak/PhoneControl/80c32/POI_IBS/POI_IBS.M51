@@ -1,0 +1,116 @@
+ RL51                                                                 PAGE   1
+
+
+DATE : 11/06/97
+DOS 7.10 (038-N) MCS-51 RELOCATOR AND LINKER V3.1, INVOKED BY:
+RL51.EXE POI_IBS.OBJ
+
+
+INPUT MODULES INCLUDED
+  POI_IBS.OBJ(POI_IBS)
+
+
+LINK MAP FOR POI_IBS(POI_IBS)
+
+
+            TYPE    BASE      LENGTH    RELOCATION   SEGMENT NAME
+            ----    ----      ------    ----------   ------------
+
+            REG     0000H     0008H                  "REG BANK 0"
+                    0008H     0018H                  *** GAP ***
+            BIT     0020H     0001H     UNIT         FLAGS
+            IDATA   0021H     0014H     UNIT         ?STACK
+
+            CODE    0000H     0003H     ABSOLUTE     
+            CODE    0003H     0003H     ABSOLUTE     
+                    0006H     0005H                  *** GAP ***
+            CODE    000BH     0003H     ABSOLUTE     
+                    000EH     000DH                  *** GAP ***
+            CODE    001BH     0003H     ABSOLUTE     
+            CODE    001EH     0196H     UNIT         HAUPTPRG
+            CODE    01B4H     00DFH     UNIT         INTSERV
+
+
+SYMBOL TABLE FOR POI_IBS(POI_IBS)
+
+VALUE          TYPE           NAME
+-----          ----           ----
+
+-------        MODULE         POI_IBS
+I:0021H        SEGMENT        ?STACK
+C:006AH        SYMBOL         ABFRAGE1
+C:00ADH        SYMBOL         ABFRAGE2
+C:00D9H        SYMBOL         ABFRAGE3
+C:006FH        SYMBOL         BEGINN
+C:0248H        SYMBOL         DREI
+C:00EEH        SYMBOL         DTMFSERI
+B:00A8H.7      SYMBOL         EA
+C:026DH        SYMBOL         EIN
+C:0290H        SYMBOL         ENDE
+C:026FH        SYMBOL         ENDEDTMF
+C:0271H        SYMBOL         ENTPREL1
+C:0289H        SYMBOL         ENTPREL2
+B:00A8H.1      SYMBOL         ET0
+B:00A8H.3      SYMBOL         ET1
+B:00A8H        SYMBOL         EX0
+C:0003H        SYMBOL         EXTI0
+B:0020H        SYMBOL         FLAG1
+B:0020H.1      SYMBOL         FLAG2
+B:0020H.2      SYMBOL         FLAG3
+B:0020H.3      SYMBOL         FLAG4
+ RL51                                                                 PAGE   2
+
+
+B:0020H.4      SYMBOL         FLAG5
+B:0020H.5      SYMBOL         FLAG6
+B:0020H.6      SYMBOL         FLAG7
+B:0020H.7      SYMBOL         FLAG8
+B:0020H        SEGMENT        FLAGS
+C:001EH        SEGMENT        HAUPTPRG
+C:001EH        SYMBOL         INIT
+C:01B4H        SEGMENT        INTSERV
+C:01B4H        SYMBOL         INTSERV1
+C:021FH        SYMBOL         INTSERV2
+B:0088H        SYMBOL         IT0
+C:0106H        SYMBOL         MFAUS
+C:0101H        SYMBOL         MFEIN
+C:0108H        SYMBOL         MFZEIT
+C:0120H        SYMBOL         MFZEITAB
+C:021CH        SYMBOL         NACHENDE
+D:0090H        SYMBOL         P1
+B:0098H.4      SYMBOL         REN
+C:0000H        SYMBOL         RESET
+B:0098H        SYMBOL         RI
+D:0099H        SYMBOL         SBUF
+C:008DH        SYMBOL         SCHLEIFE
+C:00C1H        SYMBOL         SCHLEIFE2
+C:0178H        SYMBOL         SERI_AUS
+C:016FH        SYMBOL         SERI_EIN
+C:017EH        SYMBOL         SERIENDE
+C:0129H        SYMBOL         SERIPC
+C:0262H        SYMBOL         SICHERAB
+B:0098H.7      SYMBOL         SM0
+B:0098H.6      SYMBOL         SM1
+D:0081H        SYMBOL         SP
+C:0021H        SYMBOL         START
+C:0186H        SYMBOL         TASTE
+C:01A6H        SYMBOL         TASTEABF
+D:0088H        SYMBOL         TCON
+B:0088H.5      SYMBOL         TF0
+B:0088H.7      SYMBOL         TF1
+D:008CH        SYMBOL         TH0
+D:008DH        SYMBOL         TH1
+B:0098H.1      SYMBOL         TI
+C:000BH        SYMBOL         TIMER0
+C:001BH        SYMBOL         TIMER1
+D:008AH        SYMBOL         TL0
+D:008BH        SYMBOL         TL1
+D:0089H        SYMBOL         TMOD
+B:0088H.4      SYMBOL         TR0
+B:0088H.6      SYMBOL         TR1
+C:0255H        SYMBOL         VIER
+C:00BBH        SYMBOL         WEITER
+C:01B1H        SYMBOL         ZUDTMF
+C:023BH        SYMBOL         ZWEI
+-------        ENDMOD         POI_IBS
+

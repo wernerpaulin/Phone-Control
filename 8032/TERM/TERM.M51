@@ -1,0 +1,131 @@
+ RL51                                                                 PAGE   1
+
+
+DATE : 02/05/:7
+DOS 6.22 (038-N) MCS-51 RELOCATOR AND LINKER V3.1, INVOKED BY:
+C:\RND\ASM\RL51.EXE TERM.OBJ
+
+
+INPUT MODULES INCLUDED
+  TERM.OBJ(TERM)
+
+
+LINK MAP FOR TERM(TERM)
+
+
+            TYPE    BASE      LENGTH    RELOCATION   SEGMENT NAME
+            ----    ----      ------    ----------   ------------
+
+            REG     0000H     0008H                  "REG BANK 0"
+            REG     0008H     0008H                  "REG BANK 1"
+            REG     0010H     0008H                  "REG BANK 2"
+            REG     0018H     0008H                  "REG BANK 3"
+            BIT     0020H     0002H.4   UNIT         VAR_BIT
+                    0022H.4   0000H.4                *** GAP ***
+            IDATA   0023H     0040H     UNIT         RX_BUFFER
+            IDATA   0063H     0014H     UNIT         ?STACK
+
+            CODE    0000H     0006H     ABSOLUTE     
+                    0006H     0005H                  *** GAP ***
+            CODE    000BH     0003H     ABSOLUTE     
+            CODE    000EH     000DH     UNIT         PRGM_IRQ_EXTI0
+            CODE    001BH     0003H     ABSOLUTE     
+                    001EH     0005H                  *** GAP ***
+            CODE    0023H     0003H     ABSOLUTE     
+            CODE    0026H     013FH     UNIT         PRGM_MAIN
+            CODE    0165H     006FH     UNIT         PRGM_IRQ_SINT
+            CODE    01D4H     001EH     UNIT         PRGM_CALC
+            CODE    01F2H     0011H     UNIT         PRGM_IRQ_TIMER0
+            CODE    0203H     0011H     UNIT         PRGM_IRQ_TIMER1
+
+
+SYMBOL TABLE FOR TERM(TERM)
+
+VALUE          TYPE           NAME
+-----          ----           ----
+
+-------        MODULE         TERM
+I:0063H        SEGMENT        ?STACK
+D:00E0H        SYMBOL         ACC
+B:00C8H.1      SYMBOL         C_T2
+C:01D4H        SYMBOL         CALC
+N:000DH        SYMBOL         CHAR_CR
+C:019FH        SYMBOL         CHECK_BUFFER
+B:00C8H        SYMBOL         CP_RL2
+C:0162H        SYMBOL         CYCLIC_END
+C:0079H        SYMBOL         CYCLIC
+B:00A8H.7      SYMBOL         EA
+B:00A8H.4      SYMBOL         ES
+B:00A8H.1      SYMBOL         ET0
+B:00A8H.3      SYMBOL         ET1
+ RL51                                                                 PAGE   2
+
+
+B:00A8H.5      SYMBOL         ET2
+B:00C8H.3      SYMBOL         EXEN2
+B:00C8H.6      SYMBOL         EXF2
+C:01C9H        SYMBOL         EXIT_IRQ_SINT
+C:0003H        SYMBOL         EXTI0
+C:0128H        SYMBOL         INIT_RX
+C:000EH        SYMBOL         IRQ_EXTI0
+C:0165H        SYMBOL         IRQ_SINT
+C:01F2H        SYMBOL         IRQ_TIMER0
+C:0203H        SYMBOL         IRQ_TIMER1
+C:0026H        SYMBOL         MAIN
+N:000AH        SYMBOL         MAX_RX_BYTES
+D:0090H        SYMBOL         P1
+C:01D4H        SEGMENT        PRGM_CALC
+C:000EH        SEGMENT        PRGM_IRQ_EXTI0
+C:0165H        SEGMENT        PRGM_IRQ_SINT
+C:01F2H        SEGMENT        PRGM_IRQ_TIMER0
+C:0203H        SEGMENT        PRGM_IRQ_TIMER1
+C:0026H        SEGMENT        PRGM_MAIN
+D:00D0H        SYMBOL         PSW
+D:00CBH        SYMBOL         RCAP2H
+D:00CAH        SYMBOL         RCAP2L
+B:00C8H.5      SYMBOL         RCLK
+B:0090H        SYMBOL         REL_CO1
+B:0090H.1      SYMBOL         REL_CO2
+B:0090H.2      SYMBOL         REL_CO3
+B:0090H.3      SYMBOL         REL_CO4
+B:0098H.4      SYMBOL         REN
+C:0000H        SYMBOL         RESET
+B:0098H        SYMBOL         RI
+B:00D0H.3      SYMBOL         RS0
+B:00D0H.4      SYMBOL         RS1
+I:0023H        SEGMENT        RX_BUFFER
+C:0174H        SYMBOL         RX_CHAR
+B:0020H        SYMBOL         RX_PROGRES
+D:0099H        SYMBOL         SBUF
+C:0023H        SYMBOL         SINT
+B:0098H.7      SYMBOL         SM0
+B:0098H.6      SYMBOL         SM1
+D:0081H        SYMBOL         SP
+D:00C8H        SYMBOL         T2CON
+B:00C8H.4      SYMBOL         TCLK
+D:0088H        SYMBOL         TCON
+B:0088H.5      SYMBOL         TF0
+B:0088H.7      SYMBOL         TF1
+B:00C8H.7      SYMBOL         TF2
+D:008CH        SYMBOL         TH0
+D:00CDH        SYMBOL         TH2
+B:0098H.1      SYMBOL         TI
+C:000BH        SYMBOL         TIMER0
+C:001BH        SYMBOL         TIMER1
+D:008AH        SYMBOL         TL0
+D:00CCH        SYMBOL         TL2
+D:0089H        SYMBOL         TMOD
+B:0088H.4      SYMBOL         TR0
+B:0088H.6      SYMBOL         TR1
+B:00C8H.2      SYMBOL         TR2
+ RL51                                                                 PAGE   3
+
+
+C:01A7H        SYMBOL         TX_CHAR
+C:015EH        SYMBOL         TX_FRAME
+B:0020H.1      SYMBOL         TX_PROGRES
+B:0020H        SEGMENT        VAR_BIT
+C:01DAH        SYMBOL         WAIT_BLINK
+C:0068H        SYMBOL         WAIT_SINT
+-------        ENDMOD         TERM
+

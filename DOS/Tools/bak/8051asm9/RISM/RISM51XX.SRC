@@ -1,0 +1,2322 @@
+$title(RISM-51xx Micro-Monitor)
+
+	using	3
+%SET(dog,0)
+%SET(timer,0)
+%SET(useLEDs,0)
+%OUT(
+Do you wish to kick the 'dog? (Y or N)
+)
+
+%IF(%EQS(%IN,Y
+)) THEN (
+Watch_dog		equ	0A6H
+%SET(dog,1)
+%*DEFINE(Reset_Watchdog)(
+		MOV	Watch_dog,#1EH
+		MOV	Watch_dog,#0E1H
+			)) ELSE (
+%*DEFINE(Reset_Watchdog)())FI
+
+%OUT(Which Timer should be used for the internal Baud Generator? (1 or 2)
+)
+%IF(%EQS(%IN,2
+)) THEN (
+T2CON  DATA 0C8H
+RCAP2L DATA 0CAH
+RCAP2H DATA 0CBH
+TR2    BIT  0CAH
+%SET(timer,1)
+%*DEFINE(Initialise_Timer)(
+
+;******************************************************************************
+;		Code to use Timer 2 as baud rate generator
+
+	MOV	T2CON,#00110000B	; Timer 2 mode BRG
+	MOV	RCAP2H,#HIGH T2_baud_rate	; set timer 2 reload value
+	MOV	RCAP2L,#LOW T2_baud_rate
+	SETB	TR2			; start timer
+;******************************************************************************
+			)) ELSE (
+%*DEFINE(Initialise_Timer)(
+
+;******************************************************************************
+;		Code to use Timer 1 as baud rate generator
+;
+	MOV	TMOD,#00100000B		; Timer 1 mode 2
+	MOV	TH1,#internal_baud_rate	; set timer 1 reload value
+	SETB	TR1			; start timer
+;******************************************************************************
+))FI
+
+%OUT(What is the crystal value in MHz?
+Valid Values:
+e.g. 16.000MHz = 16
+     14.746MHz = 14
+     12.000MHz = 12
+     11.059MHz = 11
+XTAL =)
+%SET(dummy,%EVAL(%IN))
+%SET(xtal,%dummy)
+%IF(%timer EQ 0) THEN (
+	%IF(%xtal EQ 16) THEN (
+internal_baud_rate	equ	0FCH		;  9600	8.5 percent)FI
+	%IF(%xtal EQ 14) THEN (
+internal_baud_rate	equ	0FCH		;  9600	0.0 percent)FI
+	%IF(%xtal EQ 12) THEN (
+internal_baud_rate	equ	0FDH		;  9600	8.5 percent)FI
+	%IF(%xtal EQ 11) THEN (
+internal_baud_rate	equ	0FDH		;  9600	0.0 percent)FI
+)FI
+%IF(%timer EQ 1) THEN (
+	%IF(%xtal EQ 16) THEN (
+T2_baud_rate		equ	-52		;  9600)FI
+	%IF(%xtal EQ 14) THEN (
+T2_baud_rate		equ	-48		;  9600)FI
+	%IF(%xtal EQ 12) THEN (
+T2_baud_rate		equ	-39		;  9600)FI
+	%IF(%xtal EQ 11) THEN (
+T2_baud_rate		equ	-36		;  9600)FI
+)FI
+
+%OUT(What is the executable RAM address? )
+%SET(RAM_start,%EVAL(%IN))
+Scratch_RAM		equ	%RAM_start	; beginning of external program/data
+
+%OUT(
+Do you want diagnostic LEDs? (Y or N)
+)
+
+%IF(%EQS(%IN,Y
+)) THEN (
+LED_port		equ	0FF80H
+%SET(useLEDs,1)
+)FI
+
+$title(RISM-51%IF(%dog EQ 1)THEN(G)ELSE(%IF(%timer EQ 1)THEN(Fx)FI)FI%IF((%dog AND %TIMER) EQ 1)THEN(B)ELSE(%IF((%dog AND (NOT %timer)) EQ 1)THEN(A)FI)FI Micro-Monitor)
+
+$eject
+stack_area		equ	07H
+
+		; baud rate values for 18.432 MHz xtal using 82510 UART
+		;006H			; 19200 0.0 percent
+UART_baud_rate		equ		00CH			;  9600	0.0 percent
+		;018H			;  4800	0.0 percent
+		;030H			;  2400	0.0 percent
+		;060H			;  1200	0.0 percent
+		;0C0H			;   600	0.0 percent
+		;180H			;   300	0.0 percent
+
+UART_Write_port		equ	0FE80H
+	UART_Txd	equ	UART_Write_port+0
+	BRG_low_write	equ	UART_Write_port+0
+	GER_write	equ	UART_Write_port+1
+	BRG_high_write	equ	UART_Write_port+1
+	GIR_BANK_write	equ	UART_Write_port+2
+	LCR_write	equ	UART_Write_port+3
+	MCR_write	equ	UART_Write_port+4
+	LSR_write	equ	UART_Write_port+5
+	MSR_write	equ	UART_Write_port+6
+	ACR0_write	equ	UART_Write_port+7
+UART_Read_port		equ	0FEC0H
+	UART_Rxd	equ	UART_Read_port+0
+	BRG_low_read	equ	UART_Read_port+0
+	GER_read	equ	UART_Read_port+1
+	BRG_high_read	equ	UART_Read_port+1
+	GIR_BANK_read	equ	UART_Read_port+2
+	LCR_read	equ	UART_Read_port+3
+	MCR_read	equ	UART_Read_port+4
+	LSR_read	equ	UART_Read_port+5
+	MSR_read	equ	UART_Read_port+6
+	ACR0_read	equ	UART_Read_port+7
+
+internal_break_bit	bit	P3.5
+
+$eject
+	DSEG at 2EH
+mode:		DS	1
+	DLEmode		bit	mode.0
+	diagnostic	bit	mode.4
+	userruns	bit	mode.7
+	user_break	bit	mode.6
+	external_serial	bit	mode.5
+	No_scratch_RAM	bit	mode.3
+	step_enabled	bit	mode.2
+
+selector:	DS	1
+	int_data	bit	selector.0
+	ext_data	bit	selector.1
+	code_space	bit	selector.2
+	SFR_space	bit	selector.3
+
+RISM_DATA:
+data_low:	DS	1
+data_high:	DS	3
+RISM_ADDR:
+addr:		DS	1
+addr_high:	DS	1
+char:		DS	1
+;memtop_low:	DS	1
+;memtop_high:	DS	1
+USER_STACK:
+	user_PC:
+	user_PC_low:		DS	1
+		user_PC_high:	DS	1
+	user_PSW:		DS	1
+
+$eject
+	CSEG
+	ORG	0			; reset vector
+
+	JMP	Reset_vector
+
+	ORG	03H			; external interrupt 0 vector
+	JB	step_enabled,Step_vector
+	JMP	Scratch_RAM+03H
+
+	ORG	0BH			; timer 0 overflow interrupt vector
+	JMP	Scratch_RAM+0BH
+
+	ORG	13H			; external interrupt 1 vector
+	JB	external_serial,Extserial_isr
+	JMP	Scratch_RAM+13H
+
+	ORG	1BH			; timer 1 overflow interrupt vector
+	JMP	Scratch_RAM+1BH
+
+	ORG	23H			; serial port interrupt vector
+	JNB	external_serial,Serial_isr
+	JMP	Scratch_RAM+23H
+
+	ORG	2BH			; timer 2 overflow interrupt vector
+	JMP	Scratch_RAM+2BH		; or GSC Receive Valid
+
+	ORG	33H			; PCA(Fx) or ADC(GA) interrupt vector
+	JMP	Scratch_RAM+33H		; or GSC Receive Error
+
+	ORG	3BH			; SEP(GA) or ADC(GB) interrupt vector
+	JMP	Scratch_RAM+3BH		; or DMA Request 0
+
+	ORG	43H			; PCA1(GB) interrupt vector
+	JMP	Scratch_RAM+43H		; GSC Transmit Valid
+
+	ORG	4BH			; alternate SEP(GB) interrupt vector 
+	JMP	Scratch_RAM+4BH		; GSC Transmit Error
+
+	ORG	53H			; external interrupt 2 vector
+	JMP	Scratch_RAM+53H		; or DMA Request 1
+
+	ORG	5BH			; external interrupt 3 vector 
+	JMP	Scratch_RAM+5BH
+
+	ORG	63H			; external interrupt 4 vector  
+	JMP	Scratch_RAM+63H
+
+	ORG	6BH			; external interrupt 5 vector  
+	JMP	Scratch_RAM+6BH
+
+	ORG	73H			; external interrupt 6 vector  
+	JMP	Scratch_RAM+73H
+
+	ORG	7BH			; reserved 
+	JMP	Scratch_RAM+7BH
+$eject
+	ORG	40H
+Break_vector:
+	JMP	Break
+
+	ORG	80H
+Step_vector:
+	SETB	INT0			; clear the interrupt
+	CLR	EX0			; disable interrupt 0
+	CLR	PX0			; reset priority
+	CLR	step_enabled		; disable the step interrupt
+	JMP	Break			; process like a normal break
+Serial_isr:
+	JMP	Serial_isr_vector
+Extserial_isr:
+	PUSH	DPH
+	PUSH	DPL
+	PUSH	ACC
+	MOV	DPTR,#GIR_BANK_read
+	MOVX	A,@DPTR
+	JB	ACC.2,Extrecv_ready	; if not serial data
+	MOV	DPTR,#GER_write		; enable receive FIFO interrupt
+	MOV	A,#01H
+	MOVX	@DPTR,A
+	POP	ACC
+	POP	DPL
+	POP	DPH
+	RETI
+Extrecv_ready:
+;***** Code Patch for diagnostics *****
+	JNB	diagnostic,Extisr_start	; if diagnostic bit is not set do monitor
+	MOV	DPTR,#UART_Rxd
+	MOVX	A,@DPTR			; else, get character
+	INC	A			; increment it
+%IF(%useLEDS EQ 1)THEN(	MOV	DPTR,#LED_port
+	MOVX	@DPTR,A
+)FI
+	MOV	DPTR,#UART_Txd		; and transmit it back out
+	MOVX	@DPTR,A
+	DEC	A
+	CJNE	A,#'\',Extrec_red
+	CLR	diagnostic
+	POP	ACC
+	POP	ACC
+	POP	ACC
+	MOV	A,#LOW(Monitor_continue)
+	PUSH	ACC
+	MOV	A,#HIGH(Monitor_continue)
+	PUSH	ACC
+	RETI
+Extrec_red:
+	POP	ACC
+	POP	DPL
+	POP	DPH
+	RETI
+;**************************************
+Extisr_start:
+	MOV	DPTR,#UART_Rxd
+	MOVX	A,@DPTR			; get character
+	MOV	char,A
+	POP	ACC
+	POP	DPL
+	POP	DPH
+	PUSH	PSW
+	PUSH	ACC
+	PUSH	B
+	ORL	PSW,#18H		; select register bank three
+	MOV	A,char
+	JMP	Continue_point
+
+$eject
+Serial_isr_vector:
+	JB	RI,Receive_ready
+	CLR	TI
+	RETI
+Receive_ready:
+;***** Code Patch for diagnostics *****
+	JNB	diagnostic,Stack_start	; if diagnostic bit is not set do monitor
+	MOV	A,SBUF			; else, get character
+	CLR	RI
+	INC	A			; increment it
+%IF(%useLEDS EQ 1)THEN(	MOV	DPTR,#LED_port
+	MOVX	@DPTR,A
+)FI
+	MOV	SBUF,A			; and transmit it back out
+	CLR	TI
+	DEC	A
+	CJNE	A,#'\',Rec_red
+	CLR	diagnostic
+	MOV	A,#LOW(Monitor_continue)
+	PUSH	ACC
+	MOV	A,#HIGH(Monitor_continue)
+	PUSH	ACC
+	RETI
+Rec_red:
+	RETI
+;**************************************
+Stack_start:
+	PUSH	PSW
+	PUSH	ACC
+	PUSH	B
+Stack_end:
+	ORL	PSW,#18H		; select register bank three
+	MOV	A,SBUF
+	MOV	char,A
+	CLR	RI
+$eject
+;*
+;* Micro Monitor
+;* -------------
+;* Control passes to this point when the monitor gets a serial I/O interrupt
+;*
+Continue_point:
+	JB	mode.0,Force_load_data	; DLE flag is set
+	CJNE	A,#1FH,$+3
+	JNC	load_data		; commands are <= 1FH
+Process_command:
+	CLR	C
+	RLC	A
+	ADD	A,#(Command_table-PC_1) ; point to high byte of vector
+	MOV	B,A
+	ADD	A,#((PC_1-PC_0)+1)	; point to low byte of vector
+	MOVC	A,@A+PC			; get low byte of vector
+PC_0:	PUSH	ACC			; put on stack
+	XCH	A,B
+	MOVC	A,@A+PC			; get high byte of vector
+PC_1:	PUSH	ACC			; put on stack
+	RET
+;
+Command_table:
+	DW	Set_DLE		; 00
+	DW	Xmit		; 01
+	DW	Xmita		; 02
+	DW	Write_bytea	; 03
+	DW	Read_byte	; 04
+	DW	Read_word	; 05
+	DW	Read_long	; 06
+	DW	Write_byte	; 07
+	DW	Write_word	; 08
+	DW	Write_long	; 09
+	DW	Data_to_addr	; 0A
+	DW	Indirect	; 0B
+	DW	Read_PSW	; 0C
+	DW	Write_PSW	; 0D
+	DW	Read_SP		; 0E
+	DW	Write_SP	; 0F
+	DW	Read_PC		; 10
+	DW	Write_PC	; 11
+	DW	GO		; 12
+	DW	Halt		; 13
+	DW	Report		; 14
+	DW	Exit		; 15
+	DW	Exit		; 16
+	DW	Exit		; 17
+	DW	Write_selector	; 18
+	DW	Read_bit	; 19
+	DW	Write_bit	; 1A
+	DW	Step		; 1B
+	DW	Exit		; 1C
+	DW	Exit		; 1D
+	DW	Exit		; 1E
+	DW	Exit		; 1F
+$eject
+;
+Xmit_exit:
+;--------
+; Used by rism commands which transmit response
+;
+	JNB	external_serial,Xmit_internal
+	PUSH	DPH
+	PUSH	DPL
+	MOV	DPTR,#UART_Txd
+	MOV	A,char
+	MOVX	@DPTR,A
+	POP	DPL
+	POP	DPH
+	JMP	Exit
+Xmit_internal:
+	MOV	SBUF,char
+	CLR	TI
+;
+Exit:
+;---
+; Used by all commands (xmit_exit falls into this code)
+;
+	POP	B
+	POP	ACC
+	POP	PSW
+	RETI
+$eject
+;
+; Tell the commands what to use for PSW while monitor is running
+;
+rism_PSW	equ	00011000B	; select register bank three
+;
+;
+Force_load_data:
+;--------------
+	CLR	mode.0			; clear DLE flag
+;
+Load_data:
+;--------
+	MOV	data_high+2,data_high+1
+	MOV	data_high+1,data_high
+	MOV	data_high,data_low
+	MOV	data_low,char
+	JMP	Exit
+;
+Set_DLE:
+;------
+	SETB	mode.0
+	JMP	Exit
+;
+Xmit:
+;---
+; char:=data[7...0]
+; data:=data >> 8
+	MOV	char,data_low
+	MOV	data_low,data_high
+	MOV	data_high,data_high+1
+	MOV	data_high+1,data_high+2
+	JMP	Xmit_exit
+;
+Xmita:
+;---
+; char:=data[7...0]
+; data:=data >> 8
+; addr:=addr+1
+	MOV	char,data_low
+	MOV	data_low,data_high
+	MOV	data_high,data_high+1
+	MOV	data_high+1,data_high+2
+	INC	addr
+	MOV	A,addr
+	JNZ	Xmita_0
+	INC	addr_high
+Xmita_0:
+	JMP	Xmit_exit
+$eject
+;
+Write_bytea:	; 03
+	JNB	int_data,WBa_0
+	JMP	Write_internal_bytea
+WBa_0:	JNB	ext_data,WBa_1
+	JMP	Write_external_bytea
+WBa_1:	JNB	code_space,WBa_2
+	JMP	Write_code_bytea
+WBa_2:	JNB	SFR_space,WBa_3
+	JMP	Write_SFR_bytea
+WBa_3:	JMP	Exit
+;
+Read_byte:	; 04
+	JNB	int_data,RB_0
+	JMP	Read_internal_byte
+RB_0:	JNB	ext_data,RB_1
+	JMP	Read_external_byte
+RB_1:	JNB	code_space,RB_2
+	JMP	Read_code_byte
+RB_2:	JNB	SFR_space,RB_3
+	JMP	Read_SFR_byte
+RB_3:	JMP	Exit
+;
+Read_word:	; 05
+	JNB	int_data,RW_0
+	JMP	Read_internal_word
+RW_0:	JNB	ext_data,RW_1
+	JMP	Read_external_word
+RW_1:	JNB	code_space,RW_2
+	JMP	Read_code_word
+RW_2:	JNB	SFR_space,RW_3
+	JMP	Read_SFR_word
+RW_3:	JMP	Exit
+;
+Read_long:	; 06
+	JNB	int_data,RL_0
+	JMP	Read_internal_long
+RL_0:	JNB	ext_data,RL_1
+	JMP	Read_external_long
+RL_1:	JNB	code_space,RL_2
+	JMP	Read_code_long
+RL_2:	JNB	SFR_space,RL_3
+	JMP	Read_SFR_long
+RL_3:	JMP	Exit
+;
+Write_byte:	; 07
+	JNB	int_data,WB_0
+	JMP	Write_internal_byte
+WB_0:	JNB	ext_data,WB_1
+	JMP	Write_external_byte
+WB_1:	JNB	code_space,WB_2
+	JMP	Write_code_byte
+WB_2:	JNB	SFR_space,WB_3
+	JMP	Write_SFR_byte
+WB_3:	JMP	Exit
+;
+Write_word:	; 08
+	JNB	int_data,WW_0
+	JMP	Write_internal_word
+WW_0:	JNB	ext_data,WW_1
+	JMP	Write_external_word
+WW_1:	JNB	code_space,WW_2
+	JMP	Write_code_word
+WW_2:	JNB	SFR_space,WW_3
+	JMP	Write_SFR_word
+WW_3:	JMP	Exit
+;
+Write_long:	; 09
+	JNB	int_data,WL_0
+	JMP	Write_internal_long
+WL_0:	JNB	ext_data,WL_1
+	JMP	Write_external_long
+WL_1:	JNB	code_space,WL_2
+	JMP	Write_code_long
+WL_2:	JNB	SFR_space,WL_3
+	JMP	Write_SFR_long
+WL_3:	JMP	Exit
+;
+Indirect:	; 0B
+	JNB	int_data,I_0
+	JMP	Indirect_internal
+I_0:	JNB	ext_data,I_1
+	JMP	Indirect_external
+I_1:	JNB	code_space,I_2
+	JMP	Indirect_code
+I_2:	JNB	SFR_space,I_3
+	JMP	Indirect_SFR
+I_3:	JMP	Exit
+;
+;
+$eject
+;
+Data_to_addr:
+;-----------
+; addr:=data
+	MOV	addr_high,data_high
+	MOV	addr,data_low
+	JMP	Exit
+;
+Write_PC:
+;-------
+; User_PC:=data (assumes user code not running)
+	JB	userruns,Dont_write_PC
+	MOV	user_PC_low,data_low
+	MOV	user_PC_high,data_high
+Dont_write_PC:
+	JMP	Exit
+;
+Read_PC:
+;------
+; data:=User_PC
+	JB	userruns,Read_PC_0
+	MOV	data_low,user_PC_low
+	MOV	data_high,user_PC_high
+	JMP	Exit
+Read_PC_0:
+	PUSH	AR0
+	MOV	A,SP
+	CLR	C
+	SUBB	A,#((Stack_end-Stack_start)/2)+2
+	MOV	R0,A
+	MOV	data_low,@R0
+	INC	R0
+	MOV	data_high,@R0
+	POP	AR0
+	JMP	Exit
+;
+Read_PSW:
+;-------
+; data:=User_PSW
+	JB	userruns,Read_PSW_0
+	MOV	data_low,user_PSW
+	JMP	Exit
+Read_PSW_0:
+	PUSH	AR0
+	MOV	A,SP
+	CLR	C
+	SUBB	A,#((Stack_end-Stack_start)/2)
+	MOV	R0,A
+	MOV	data_low,@R0
+	POP	AR0
+	JMP	Exit
+;
+Write_PSW:
+;--------
+; User_PSW:=data
+	JB	userruns,Write_PSW_0
+	MOV	user_PSW,data_low
+	JMP	Exit
+Write_PSW_0:
+	PUSH	AR0
+	MOV	A,SP
+	CLR	C
+	SUBB	A,#((Stack_end-Stack_start)/2)
+	MOV	R0,A
+	MOV	@R0,data_low
+	POP	AR0
+	JMP	Exit
+;
+Write_SP:
+;-------
+; User_SP:=data (assumes pause is running)
+	JB	userruns,Dont_write_SP
+	POP	B
+	POP	ACC
+	MOV	char,A
+	POP	PSW
+	MOV	SP,data_low
+	MOV	A,#LOW Monitor_pause		; the new program counter
+	PUSH	ACC
+	MOV	A,#HIGH Monitor_pause
+	PUSH	ACC
+	MOV	A,#rism_PSW			; PSW
+	PUSH	ACC
+	MOV	A,char
+	PUSH	ACC
+	PUSH	B
+Dont_write_SP:
+	JMP	Exit
+;
+Read_SP:
+;------
+; data:=User_SP
+	MOV	A,SP
+	CLR	C
+	SUBB	A,#((Stack_end-Stack_start)/2)+2
+	MOV	data_low,A
+	JMP	Exit
+;
+Write_selector:
+;-------------
+; data:=selector (memory segment select)
+	MOV	selector,data_low
+	JMP	Exit
+;
+$eject
+;
+Step:	SETB	PX0			; set interrupt 0 to high priority
+	SETB	EX0			; enable interrupt 0
+	SETB	step_enabled		; enable the step interrupt
+	CLR	INT0			; force an interrupt after the RETI
+	; fall through and process as if its a regular GO command
+Go:
+;-
+; Clear BREAK bit
+	JB	external_serial,Go_cont_0
+	CLR	internal_break_bit
+	JMP	Go_cont_1
+Go_cont_0:
+	PUSH	DPH
+	PUSH	DPL
+	MOV	DPTR,#MCR_write
+	MOV	A,#04H
+	MOVX	@DPTR,A
+	POP	DPL
+	POP	DPH
+Go_cont_1:
+
+; Flush the pause routine off the stack
+	PUSH	AR0
+	MOV	A,SP				; calculate the beginning
+	CLR	C				;  of the stack upon entry
+	SUBB	A,#((Stack_end-Stack_start)/2)+2
+	MOV	R0,A				; R0 now points to user PC
+	MOV	@R0,user_PC_low			; load user stack
+	INC	R0
+	MOV	@R0,user_PC_high
+	INC	R0
+	MOV	@R0,user_PSW
+	POP	AR0
+	CLR	mode.6				; clear break flag if set
+	SETB	mode.7				; set user running flag
+	JMP	Exit
+;
+Halt:
+;---
+; Stops "user" execution by setting up the stack to return to pause with
+; all interrupts but serial I/O locked out.
+	PUSH	AR0
+	MOV	A,SP				; calculate the beginning
+	CLR	C				;  of the stack upon entry
+	SUBB	A,#((Stack_end-Stack_start)/2)+2
+	MOV	R0,A				; R0 now points to user PC
+	MOV	user_PC_low,@R0			; save user stack
+	MOV	@R0,#LOW Monitor_pause		; the new program counter
+	INC	R0
+	MOV	user_PC_high,@R0
+	MOV	@R0,#HIGH Monitor_pause
+	INC	R0
+	MOV	user_PSW,@R0
+	MOV	@R0,#rism_PSW			; PSW
+	POP	AR0
+	CLR	mode.7
+	CLR	mode.6
+; Set BREAK bit
+	JB	external_serial,Halt_cont_0
+	SETB	internal_break_bit
+	JMP	Halt_cont_1
+Halt_cont_0:
+	PUSH	DPH
+	PUSH	DPL
+	MOV	DPTR,#MCR_write
+	MOV	A,#00H
+	MOVX	@DPTR,A
+	POP	DPL
+	POP	DPH
+Halt_cont_1:
+	JMP	Exit
+$eject
+;
+Break:
+;----
+; This routine is invoked by an instruction used for breakpointing,
+; it operates somewhat like a HALT instruction.
+	PUSH	PSW
+	ORL	PSW,#18H		; select register bank three
+	PUSH	ACC
+	PUSH	B
+	PUSH	AR0
+	MOV	A,SP				; calculate the beginning
+	CLR	C				;  of the stack upon entry
+	SUBB	A,#((Stack_end-Stack_start)/2)+2
+	MOV	R0,A				; R0 now points to user PC
+	MOV	user_PC_low,@R0			; save user stack
+	MOV	@R0,#LOW Monitor_pause		; the new program counter
+	INC	R0
+	MOV	user_PC_high,@R0
+	MOV	@R0,#HIGH Monitor_pause
+	INC	R0
+	MOV	user_PSW,@R0
+	MOV	@R0,#rism_PSW			; PSW
+	POP	AR0
+	CLR	mode.7
+	SETB	mode.6
+; Set BREAK bit
+	JB	external_serial,Break_cont_0
+	SETB	internal_break_bit
+	JMP	Break_cont_1
+Break_cont_0:
+	PUSH	DPH
+	PUSH	DPL
+	MOV	DPTR,#MCR_write
+	MOV	A,#00H
+	MOVX	@DPTR,A
+	POP	DPL
+	POP	DPH
+Break_cont_1:
+	POP	B
+	POP	ACC
+	POP	PSW
+	RETI				; this was changed from a RET when
+					; STEP was installed
+;
+Report:
+;-----
+; Report user status
+	stopped		equ	0
+	running		equ	1
+	trapped		equ	2
+;
+	MOV	data_high,#HIGH stopped
+	MOV	data_low,#running
+	JB	mode.7,Report_exit		; if bit 7=1 report running
+	MOV	data_low,#trapped
+	JB	mode.6,Report_exit		; if bit 6=1 report trapped
+	MOV	data_low,#stopped
+Report_exit:
+	JMP	Exit
+
+$eject
+Reset_vector:
+	CLR	EA			; disable interrupts
+
+	MOV	user_PC_low,#LOW Scratch_RAM	; user PC will RESET to start
+	MOV	user_PC_high,#HIGH Scratch_RAM	; of executable RAM
+	MOV	user_PSW,PSW		; user PSW is the reset PSW
+
+	ANL	mode,#1FH		; check for warm or cold reset
+	ANL	selector,#0F0H
+	MOV	A,mode
+	XRL	A,selector
+	JZ	Dont_write_Break
+
+	MOV	DPTR,#Scratch_RAM
+	MOV	A,#12H			; install BREAK call instruction
+	MOVX	@DPTR,A
+	INC	DPTR
+	MOV	A,#HIGH Break_vector
+	MOVX	@DPTR,A
+	INC	DPTR
+	MOV	A,#LOW Break_vector
+	MOVX	@DPTR,A
+
+Dont_write_Break:
+	MOV	SP,#stack_area		; initialize stack pointer
+	MOV	mode,#0			; initialize rism mode register
+	SETB	diagnostic
+	CLR	step_enabled		; disable the step interrupt
+	MOV	selector,#01H		; selector internal RAM space
+
+; Size the RAM
+;	MOV	DPTR,#scratch_RAM	; point to the bottom of RAM
+;	SETB	No_scratch_RAM		; assume there is no RAM
+;StR_0:	CLR	A
+;	MOVC	A,@A+DPTR		; get byte at that location
+;	CPL	A			;  complement it
+;	MOV	B,A			;  save it for the compare
+;	MOVX	@DPTR,A			;  and write it back out
+;	CLR	A
+;	MOVC	A,@A+DPTR		;  get it back (CODE-wise)
+;	CJNE	A,B,Top_of_RAM		; if it is the same, there's RAM here
+;	CLR	No_scratch_RAM		;  found some RAM
+;	CPL	A			;  re-complement it
+;	MOVX	@DPTR,A			;  and put the original value back
+;	INC	DPH			; point to next page of RAM
+;	MOV	A,DPH			; check for end of memory
+;	JZ	Top_of_RAM
+;	%Reset_Watchdog
+;	JMP	StR_0			; and loop until the end
+;Top_of_RAM:
+;	MOV	A,B			; restore original byte
+;	MOVX	@DPTR,A			;  and put the original value back
+;	DEC	DPH			; point to last good location of RAM
+;	DEC	DPL
+;	MOV	memtop_high,DPH		; load variables with value
+;	MOV	memtop_low,DPL
+
+; Check for external serial port option
+	MOV	DPTR,#LSR_read		; point to status port
+	MOVX	A,@DPTR			; read status
+	CLR	external_serial		; assume no external slave
+	CJNE	A,#60H,No_slave		; compare status to 60H
+Found_slave:
+	SETB	external_serial		; set bit if slave present
+No_slave:
+
+; Initialise baud rate generator
+	JB	external_serial,Init_external
+
+Init_internal:
+; Initialise baud rate generator
+	%Initialise_Timer
+; Initalise serial port
+	MOV	SCON,#01011000B		; Mode 1, S.P.enable
+	SETB	TI
+; Initialize interrupts
+	SETB	PS			; set interrupt to high priority
+	SETB	ES			; enable serial port interrupt
+	SETB	EA			; global interrupt enable
+%IF(%useLEDS EQ 1)THEN(	CALL	Flash_LEDs
+)FI
+	JMP	Monitor_continue
+
+Init_external:
+	MOV	DPTR,#LCR_write		; Set DLAB bit
+	MOV	A,#80H
+	MOVX	@DPTR,A
+	MOV	DPTR,#BRG_low_write	; Load baud_rate
+	MOV	A,#LOW UART_baud_rate
+	MOVX	@DPTR,A
+	INC	DPTR
+	MOV	A,#HIGH Uart_baud_rate
+	MOVX	@DPTR,A
+	MOV	DPTR,#LCR_write		; Reset DLAB,np,8bit,1stop...
+	MOV	A,#03H
+	MOVX	@DPTR,A
+	MOV	DPTR,#GIR_BANK_write	; select register bank three
+	MOV	A,#60H
+	MOVX	@DPTR,A
+	MOV	DPTR,#MCR_write		; select OUT1 mode for pin 12
+	MOV	A,#7CH
+	MOVX	@DPTR,A
+	MOV	DPTR,#GIR_BANK_write	; select register bank zero
+	CLR	A
+	MOVX	@DPTR,A
+	MOV	DPTR,#GER_write		; enable receive FIFO interrupt
+	MOV	A,#01H
+	MOVX	@DPTR,A
+
+; Initialize interrupts
+	SETB	PX1			; set interrupt to high priority
+	SETB	EX1			; enable external interrupt 1
+	SETB	EA			; enable global interrupt
+%IF(%useLEDS EQ 1)THEN(	CALL	Flash_LEDs
+)FI
+Monitor_continue:
+	MOV	SP,#stack_area		; initialize stack pointer
+%IF(%useLEDS EQ 1)THEN(	MOV	DPTR,#LED_port
+	MOV	A,#0FFH
+	MOVX	@DPTR,A
+)FI
+	MOV	B,#0
+	CLR	A
+	MOV	DPTR,#0
+	MOV	PSW,#0
+
+Monitor_pause:
+	%Reset_Watchdog
+	JMP	Monitor_pause
+
+%IF(%useLEDS EQ 1)THEN(Flash_LEDs:
+	MOV	DPTR,#LED_port
+	MOV	A,#0
+	MOV	R0,#0
+	MOV	R1,#0
+Flash_loop:
+	SETB	C
+	MOVX	@DPTR,A
+Flash_wait:
+	DJNZ	R0,$
+	%Reset_Watchdog
+	DJNZ	R1,Flash_wait
+	RLC	A
+	JNC	Flash_loop
+	RET
+)FI
+$eject
+;
+Read_internal_byte:
+;---------
+; data:=@addr
+	PUSH	AR0
+	MOV	R0,addr
+	MOV	data_low,@R0
+	POP	AR0
+	JMP	Exit
+;
+Read_internal_word:
+; data:=@addr,@addr+1
+	PUSH	AR0
+	MOV	R0,addr
+	MOV	data_low,@R0
+	INC	R0
+	MOV	data_high,@R0
+	POP	AR0
+	JMP	Exit
+;
+Read_internal_long:
+; data:=@addr,@addr+1
+; data+2:=@addr+2.@addr+3
+	PUSH	AR0
+	MOV	R0,addr
+	MOV	data_low,@R0
+	INC	R0
+	MOV	data_high,@R0
+	INC	R0
+	MOV	data_low+2,@R0
+	INC	R0
+	MOV	data_high+2,@R0
+	POP	AR0
+	JMP	Exit
+$eject
+;
+Write_internal_byte:
+Write_internal_bytea:
+;----------
+; @addr:=data
+; addr:=addr+1
+	PUSH	AR0
+	MOV	R0,addr
+	MOV	@R0,data_low
+	INC	addr
+	POP	AR0
+	JMP	Exit
+;
+Write_internal_word:
+;---------
+; @addr,@addr+1:=data
+; addr:=addr+2
+	PUSH	AR0
+	MOV	R0,addr
+	MOV	@R0,data_low
+	INC	R0
+	INC	addr
+	MOV	@R0,data_high
+	INC	addr
+	POP	AR0
+	JMP	Exit
+;
+Write_internal_long:
+;---------	
+; @addr,@addr+1:=data
+; @addr+2.@addr+3:=data+2
+; addr:=addr+4
+	PUSH	AR0
+	MOV	R0,addr
+	MOV	@R0,data_low
+	INC	R0
+	INC	addr
+	MOV	@R0,data_high
+	INC	R0
+	INC	addr
+	MOV	@R0,data_low+2
+	INC	R0
+	INC	addr
+	MOV	@R0,data_high+2
+	INC	addr
+	POP	AR0
+	JMP	Exit
+;
+Indirect_internal:
+;-------
+; addr:=@addr
+	PUSH	AR0
+	MOV	R0,addr
+	MOV	addr,@R0
+	INC	R0
+	MOV	addr_high,@R0
+	POP	AR0
+	JMP	Exit
+;
+$eject
+;
+Read_external_byte:
+;---------
+; data:=@addr
+	PUSH	DPH
+	PUSH	DPL
+	MOV	DPL,addr
+	MOV	DPH,addr_high
+	MOVX	A,@DPTR
+	MOV	data_low,A
+	POP	DPL
+	POP	DPH
+	JMP	Exit
+;
+Read_external_word:
+; data:=@addr,@addr+1
+	PUSH	DPH
+	PUSH	DPL
+	MOV	DPL,addr
+	MOV	DPH,addr_high
+	MOVX	A,@DPTR
+	MOV	data_low,A
+	INC	DPTR
+	MOVX	A,@DPTR
+	MOV	data_high,A
+	POP	DPL
+	POP	DPH
+	JMP	Exit
+;
+Read_external_long:
+; data:=@addr,@addr+1
+; data+2:=@addr+2.@addr+3
+	PUSH	DPH
+	PUSH	DPL
+	MOV	DPL,addr
+	MOV	DPH,addr_high
+	MOVX	A,@DPTR
+	MOV	data_low,A
+	INC	DPTR
+	MOVX	A,@DPTR
+	MOV	data_high,A
+	INC	DPTR
+	MOVX	A,@DPTR
+	MOV	data_low+2,A
+	INC	DPTR
+	MOVX	A,@DPTR
+	MOV	data_high+2,A
+	POP	DPL
+	POP	DPH
+	JMP	Exit
+$eject
+;
+Write_external_byte:
+Write_external_bytea:
+;----------
+; @addr:=data
+; addr:=addr+1
+	PUSH	DPH
+	PUSH	DPL
+	MOV	DPL,addr
+	MOV	DPH,addr_high
+	MOV	A,data_low
+	MOVX	@DPTR,A
+	INC	addr
+	MOV	A,addr
+	JNZ	WEB_0
+	INC	addr_high
+WEB_0:	POP	DPL
+	POP	DPH
+	JMP	Exit
+;
+Write_external_word:
+;---------
+; @addr,@addr+1:=data
+; addr:=addr+2
+	PUSH	DPH
+	PUSH	DPL
+	MOV	DPL,addr
+	MOV	DPH,addr_high
+	MOV	A,data_low
+	MOVX	@DPTR,A
+	INC	addr
+	MOV	A,addr
+	JNZ	WEW_0
+	INC	addr_high
+WEW_0:	INC	DPTR
+	MOV	A,data_high
+	MOVX	@DPTR,A
+	INC	addr
+	MOV	A,addr
+	JNZ	WEW_1
+	INC	addr_high
+WEW_1:	POP	DPL
+	POP	DPH
+	JMP	Exit
+;
+Write_external_long:
+;---------	
+; @addr,@addr+1:=data
+; @addr+2.@addr+3:=data+2
+; addr:=addr+4
+	PUSH	DPH
+	PUSH	DPL
+	MOV	DPL,addr
+	MOV	DPH,addr_high
+	MOV	A,data_low
+	MOVX	@DPTR,A
+	INC	addr
+	MOV	A,addr
+	JNZ	WEL_0
+	INC	addr_high
+WEL_0:	INC	DPTR
+	MOV	A,data_high
+	MOVX	@DPTR,A
+	INC	addr
+	MOV	A,addr
+	JNZ	WEL_1
+	INC	addr_high
+WEL_1:	INC	DPTR
+	MOV	A,data_low+2
+	MOVX	@DPTR,A
+	INC	addr
+	MOV	A,addr
+	JNZ	WEL_2
+	INC	addr_high
+WEL_2:	INC	DPTR
+	MOV	A,data_high+2
+	MOVX	@DPTR,A
+	INC	addr
+	MOV	A,addr
+	JNZ	WEL_3
+	INC	addr_high
+WEL_3:	POP	DPL
+	POP	DPH
+	JMP	Exit
+;
+Indirect_external:
+;-------
+; addr:=@addr
+	PUSH	DPH
+	PUSH	DPL
+	MOV	DPL,addr
+	MOV	DPH,addr_high
+	MOVX	A,@DPTR
+	MOV	addr,A
+	INC	DPTR
+	MOVX	A,@DPTR
+	MOV	addr_high,A
+	POP	DPL
+	POP	DPH
+	JMP	Exit
+;
+$eject
+;
+Read_code_byte:
+;---------
+; data:=@addr
+	PUSH	DPH
+	PUSH	DPL
+	MOV	DPL,addr
+	MOV	DPH,addr_high
+	CLR	A
+	MOVC	A,@A+DPTR
+	MOV	data_low,A
+	POP	DPL
+	POP	DPH
+	JMP	Exit
+;
+Read_code_word:
+; data:=@addr,@addr+1
+	PUSH	DPH
+	PUSH	DPL
+	MOV	DPL,addr
+	MOV	DPH,addr_high
+	CLR	A
+	MOVC	A,@A+DPTR
+	MOV	data_low,A
+	INC	DPTR
+	CLR	A
+	MOVC	A,@A+DPTR
+	MOV	data_high,A
+	POP	DPL
+	POP	DPH
+	JMP	Exit
+;
+Read_code_long:
+; data:=@addr,@addr+1
+; data+2:=@addr+2.@addr+3
+	PUSH	DPH
+	PUSH	DPL
+	MOV	DPL,addr
+	MOV	DPH,addr_high
+	CLR	A
+	MOVC	A,@A+DPTR
+	MOV	data_low,A
+	INC	DPTR
+	CLR	A
+	MOVC	A,@A+DPTR
+	MOV	data_high,A
+	INC	DPTR
+	CLR	A
+	MOVC	A,@A+DPTR
+	MOV	data_low+2,A
+	INC	DPTR
+	CLR	A
+	MOVC	A,@A+DPTR
+	MOV	data_high+2,A
+	POP	DPL
+	POP	DPH
+	JMP	Exit
+$eject
+;
+Write_code_byte:
+Write_code_bytea:
+;----------
+; @addr:=data
+; addr:=addr+1
+	PUSH	DPH
+	PUSH	DPL
+	MOV	DPL,addr
+	MOV	DPH,addr_high
+	MOV	A,data_low
+	MOVX	@DPTR,A
+	INC	addr
+	MOV	A,addr
+	JNZ	WCB_0
+	INC	addr_high
+WCB_0:	POP	DPL
+	POP	DPH
+	JMP	Exit
+;
+Write_code_word:
+;---------
+; @addr,@addr+1:=data
+; addr:=addr+2
+	PUSH	DPH
+	PUSH	DPL
+	MOV	DPL,addr
+	MOV	DPH,addr_high
+	MOV	A,data_low
+	MOVX	@DPTR,A
+	INC	addr
+	MOV	A,addr
+	JNZ	WCW_0
+	INC	addr_high
+WCW_0:	INC	DPTR
+	MOV	A,data_high
+	MOVX	@DPTR,A
+	INC	addr
+	MOV	A,addr
+	JNZ	WCW_1
+	INC	addr_high
+WCW_1:	POP	DPL
+	POP	DPH
+	JMP	Exit
+;
+Write_code_long:
+;---------	
+; @addr,@addr+1:=data
+; @addr+2.@addr+3:=data+2
+; addr:=addr+4
+	PUSH	DPH
+	PUSH	DPL
+	MOV	DPL,addr
+	MOV	DPH,addr_high
+	MOV	A,data_low
+	MOVX	@DPTR,A
+	INC	addr
+	MOV	A,addr
+	JNZ	WCL_0
+	INC	addr_high
+WCL_0:	INC	DPTR
+	MOV	A,data_high
+	MOVX	@DPTR,A
+	INC	addr
+	MOV	A,addr
+	JNZ	WCL_1
+	INC	addr_high
+WCL_1:	INC	DPTR
+	MOV	A,data_low+2
+	MOVX	@DPTR,A
+	INC	addr
+	MOV	A,addr
+	JNZ	WCL_2
+	INC	addr_high
+WCL_2:	INC	DPTR
+	MOV	A,data_high+2
+	MOVX	@DPTR,A
+	INC	addr
+	MOV	A,addr
+	JNZ	WCL_3
+	INC	addr_high
+WCL_3:	POP	DPL
+	POP	DPH
+	JMP	Exit
+;
+Indirect_code:
+;-------
+; addr:=@addr
+	PUSH	DPH
+	PUSH	DPL
+	MOV	DPL,addr
+	MOV	DPH,addr_high
+	CLR	A
+	MOVC	A,@A+DPTR
+	MOV	addr,A
+	INC	DPTR
+	CLR	A
+	MOVC	A,@A+DPTR
+	MOV	addr_high,A
+	POP	DPL
+	POP	DPH
+	JMP	Exit
+;
+$eject
+;
+Read_SFR_byte:
+;---------
+; data:=@addr
+	PUSH	DPH
+	PUSH	DPL
+	MOV	A,addr			; get address to read
+	CLR	ACC.7
+	MOV	B,#4			; multiply by four
+	MUL	AB
+	MOV	DPL,A			; low order base plus offset
+	MOV	A,#HIGH(Instruction_table)
+	ADD	A,B
+	MOV	DPH,A			; high order base plus offset
+	CALL	Ext_executor
+	MOV	data_low,A
+	POP	DPL
+	POP	DPH
+	JMP	Exit
+
+Read_ACC:
+	PUSH	AR0
+	MOV	A,SP				; calculate the location of the
+	CLR	C				;  accumulator in the stack
+	SUBB	A,#((Stack_end-Stack_start)/2)+3 ; upon entry
+	MOV	R0,A				; R0 now points to user ACC
+	MOV	A,@R0
+	POP	AR0
+	RET
+
+Read_DPH:
+	PUSH	AR0
+	MOV	A,SP				; calculate the location of
+	CLR	C				;  DPH in the stack
+	SUBB	A,#((Stack_end-Stack_start)/2)+1 ; upon entry
+	MOV	R0,A				; R0 now points to user DPH
+	MOV	A,@R0
+	POP	AR0
+	RET
+
+Read_DPL:
+	PUSH	AR0
+	MOV	A,SP				; calculate the location of
+	CLR	C				;  DPL in the stack
+	SUBB	A,#((Stack_end-Stack_start)/2)+0 ; upon entry
+	MOV	R0,A				; R0 now points to user DPL
+	MOV	A,@R0
+	POP	AR0
+	RET
+
+Read_B:
+	PUSH	AR0
+	MOV	A,SP				; calculate the location of
+	CLR	C				;  B in the stack
+	SUBB	A,#((Stack_end-Stack_start)/2)+2 ; upon entry
+	MOV	R0,A				; R0 now points to user B
+	MOV	A,@R0
+	POP	AR0
+	RET
+
+;
+Ext_executor:				; Execute instruction stream 
+	CLR	A			;  constructed in external RAM
+	JMP	@A+DPTR
+;
+Read_SFR_word:
+; data:=@addr,@addr+1
+	PUSH	DPH
+	PUSH	DPL
+	MOV	A,addr			; get address to read
+	CLR	ACC.7
+	MOV	B,#4			; multiply by four
+	MUL	AB
+	MOV	DPL,A			; low order base plus offset
+	MOV	A,#HIGH(Instruction_table)
+	ADD	A,B
+	MOV	DPH,A			; high order base plus offset
+	CALL	Ext_executor
+	MOV	data_low,A
+	INC	DPTR
+	INC	DPTR
+	INC	DPTR
+	INC	DPTR
+	MOV	A,DPH
+	CJNE	A,#HIGH(Instruction_table+512),R_SFR_W0
+	JMP	R_SFR_W1
+R_SFR_W0:
+	CALL	Ext_executor
+	MOV	data_high,A
+R_SFR_W1:
+	POP	DPL
+	POP	DPH
+	JMP	Exit
+;
+Read_SFR_long:
+; data:=@addr,@addr+1
+; data+2:=@addr+2.@addr+3
+	MOV	data_low,#0
+	MOV	data_high,#0
+	MOV	data_low+2,#0
+	MOV	data_high+2,#0
+	JMP	Exit
+$eject
+;
+Write_SFR_byte:
+Write_SFR_bytea:
+;----------
+; @addr:=data
+; addr:=addr+1
+	PUSH	DPH
+	PUSH	DPL
+	MOV	A,addr			; get address to read
+	CLR	ACC.7
+	MOV	B,#4			; multiply by four
+	MUL	AB
+	MOV	DPL,A			; low order base plus offset
+	MOV	A,#HIGH(Instruction_table+200H)
+	ADD	A,B
+	MOV	DPH,A			; high order base plus offset
+	CALL	Ext_executor
+	INC	addr
+	POP	DPL
+	POP	DPH
+	JMP	Exit
+
+Write_ACC:
+	PUSH	AR0
+	MOV	A,SP				; calculate the location of the
+	CLR	C				;  accumulator in the stack
+	SUBB	A,#((Stack_end-Stack_start)/2)+3 ; upon entry
+	MOV	R0,A				; R0 now points to user ACC
+	MOV	@R0,data_low
+	POP	AR0
+	RET
+
+Write_DPH:
+	PUSH	AR0
+	MOV	A,SP				; calculate the location of
+	CLR	C				;  DPH in the stack
+	SUBB	A,#((Stack_end-Stack_start)/2)+1 ; upon entry
+	MOV	R0,A				; R0 now points to user DPH
+	MOV	@R0,data_low
+	POP	AR0
+	RET
+
+Write_DPL:
+	PUSH	AR0
+	MOV	A,SP				; calculate the location of
+	CLR	C				;  DPL in the stack
+	SUBB	A,#((Stack_end-Stack_start)/2)+0 ; upon entry
+	MOV	R0,A				; R0 now points to user DPL
+	MOV	@R0,data_low
+	POP	AR0
+	RET
+
+Write_B:
+	PUSH	AR0
+	MOV	A,SP				; calculate the location of
+	CLR	C				;  B in the stack
+	SUBB	A,#((Stack_end-Stack_start)/2)+2 ; upon entry
+	MOV	R0,A				; R0 now points to user B
+	MOV	@R0,data_low
+	POP	AR0
+	RET
+;
+Write_SFR_word:
+;---------
+; @addr,@addr+1:=data
+; addr:=addr+2
+	PUSH	DPH
+	PUSH	DPL
+	MOV	A,addr			; get address to read
+	CLR	ACC.7
+	MOV	B,#4			; multiply by four
+	MUL	AB
+	MOV	DPL,A			; low order base plus offset
+	MOV	A,#HIGH(Instruction_table+200H)
+	ADD	A,B
+	MOV	DPH,A			; high order base plus offset
+	CALL	Ext_executor
+	INC	DPTR
+	INC	DPTR
+	INC	DPTR
+	INC	DPTR
+	MOV	A,DPH
+	CJNE	A,#HIGH(Instruction_table+512),W_SFR_W0
+	JMP	W_SFR_W1
+W_SFR_W0:
+	MOV	data_low,data_high
+	CALL	Ext_executor
+	INC	addr
+W_SFR_W1:
+	POP	DPL
+	POP	DPH
+	JMP	Exit
+;
+Write_SFR_long:
+;---------	
+; @addr,@addr+1:=data
+; @addr+2.@addr+3:=data+2
+; addr:=addr+4
+	JMP	Exit
+;
+Indirect_SFR:
+;-------
+; addr:=@addr
+	JMP	Exit
+;
+$eject
+;
+;********************************
+Read_bit:
+;---------
+; data:=@addr
+	PUSH	DPH
+	PUSH	DPL
+	MOV	A,addr			; get address of bit to read
+	ANL	A,#0F8H			; strip off byte number of bit
+	JNB	ACC.7,Read_user_bit	; if address if for a SFR bit...
+Read_SFR_bit:
+	CLR	ACC.7
+	MOV	B,#4			; multiply by four
+	MUL	AB
+	MOV	DPL,A			; low order base plus offset
+	MOV	A,#HIGH(Instruction_table)
+	ADD	A,B
+	MOV	DPH,A			; high order base plus offset
+	CALL	Ext_executor
+	JMP	Read_bit_find
+
+Read_user_bit:
+	RR	A
+	RR	A
+	RR	A
+	ADD	A,#20H			; add user bit area offset
+	PUSH	AR0
+	MOV	R0,A
+	MOV	A,@R0			; get the byte with our bit in it
+	POP	AR0
+
+Read_bit_find:
+	MOV	B,addr			; get address of bit to read
+	ANL	B,#07H			; strip off bit number of byte
+	INC	B			; adjust the bit counter
+R_bit_0:
+	RRC	A
+	DJNZ	B,R_bit_0		; loop until bit is in the carry
+	CLR	A			; clear the accumulator
+	RLC	A			; put bit in LSB of ACC
+	MOV	data_low,A		; store it
+
+	POP	DPL
+	POP	DPH
+	JMP	Exit
+
+$eject
+;
+Write_bit:
+;----------
+; @addr:=data
+;
+	PUSH	DPH
+	PUSH	DPL
+Install_a_bit:
+	MOV	A,data_low		; get data bit to write
+	ANL	A,#01H			; mask all but LSB
+	JZ	Install_a_zero
+Install_a_one:
+	CLR	C
+	JMP	W_bit_1
+Install_a_zero:
+	SETB	C
+	MOV	A,#0FEH
+W_bit_1:
+	RRC	A			; put bit into carry
+	MOV	B,addr			; get address of bit to write
+	ANL	B,#07H			; strip off bit number of byte
+	INC	B			; adjust the bit counter
+W_bit_0:
+	RLC	A
+	DJNZ	B,W_bit_0		; loop until bit is in position
+	MOV	data_low,A		; store it
+	MOV	F0,C			; save state of carry
+
+	MOV	A,addr			; get address of bit to write
+	ANL	A,#0F8H			; strip off byte number of bit
+	JNB	ACC.7,Write_user_bit	; if address if for a SFR bit...
+
+Write_SFR_bit:
+	CLR	ACC.7
+	MOV	B,#4			; multiply by four
+	MUL	AB
+	MOV	DPL,A			; low order base plus offset
+	MOV	A,#HIGH(Instruction_table)
+	ADD	A,B
+	MOV	DPH,A			; high order base plus offset
+	CALL	Ext_executor
+	CALL	Put_in_the_bit
+	MOV	data_low,A
+	ORL	DPH,#02H
+	CALL	Ext_executor
+	JMP	Write_bit_return
+
+Write_user_bit:
+	RR	A
+	RR	A
+	RR	A
+	ADD	A,#20H			; add user bit area offset
+	PUSH	AR0
+	MOV	R0,A
+	MOV	A,@R0			; get the byte with our bit in it
+	CALL	Put_in_the_bit
+	MOV	@R0,A
+	POP	AR0
+
+Write_bit_return:
+	POP	DPL
+	POP	DPH
+	JMP	Exit
+
+Put_in_the_bit:
+	JB	F0,Put_in_a_zero
+Put_in_a_one:
+	ORL	A,data_low
+	RET
+Put_in_a_zero:
+	ANL	A,data_low
+	RET
+$eject
+
+	ORG	0C00H
+Instruction_table:
+	; Special Function Register Read Commands
+	MOV	A,080H			;00
+	RET
+	NOP
+	MOV	A,081H			;01
+	RET
+	NOP
+	LJMP	Read_DPL		;02
+	NOP
+	LJMP	Read_DPH		;03
+	NOP
+	MOV	A,084H			;04
+	RET
+	NOP
+	MOV	A,085H			;05
+	RET
+	NOP
+	MOV	A,086H			;06
+	RET
+	NOP
+	MOV	A,087H			;07
+	RET
+	NOP
+	MOV	A,088H			;08
+	RET
+	NOP
+	MOV	A,089H			;09
+	RET
+	NOP
+	MOV	A,08AH			;0A
+	RET
+	NOP
+	MOV	A,08BH			;0B
+	RET
+	NOP
+	MOV	A,08CH			;0C
+	RET
+	NOP
+	MOV	A,08DH			;0D
+	RET
+	NOP
+	MOV	A,08EH			;0E
+	RET
+	NOP
+	MOV	A,08FH			;0F
+	RET
+	NOP
+	MOV	A,090H			;10
+	RET
+	NOP
+	MOV	A,091H			;11
+	RET
+	NOP
+	MOV	A,092H			;12
+	RET
+	NOP
+	MOV	A,093H			;13
+	RET
+	NOP
+	MOV	A,094H			;14
+	RET
+	NOP
+	MOV	A,095H			;15
+	RET
+	NOP
+	MOV	A,096H			;16
+	RET
+	NOP
+	MOV	A,097H			;17
+	RET
+	NOP
+	MOV	A,098H			;18
+	RET
+	NOP
+	MOV	A,099H			;19
+	RET
+	NOP
+	MOV	A,09AH			;1A
+	RET
+	NOP
+	MOV	A,09BH			;1B
+	RET
+	NOP
+	MOV	A,09CH			;1C
+	RET
+	NOP
+	MOV	A,09DH			;1D
+	RET
+	NOP
+	MOV	A,09EH			;1E
+	RET
+	NOP
+	MOV	A,09FH			;1F
+	RET
+	NOP
+	MOV	A,0A0H			;20
+	RET
+	NOP
+	MOV	A,0A1H			;21
+	RET
+	NOP
+	MOV	A,0A2H			;22
+	RET
+	NOP
+	MOV	A,0A3H			;23
+	RET
+	NOP
+	MOV	A,0A4H			;24
+	RET
+	NOP
+	MOV	A,0A5H			;25
+	RET
+	NOP
+	MOV	A,0A6H			;26
+	RET
+	NOP
+	MOV	A,0A7H			;27
+	RET
+	NOP
+	MOV	A,0A8H			;28
+	RET
+	NOP
+	MOV	A,0A9H			;29
+	RET
+	NOP
+	MOV	A,0AAH			;2A
+	RET
+	NOP
+	MOV	A,0ABH			;2B
+	RET
+	NOP
+	MOV	A,0ACH			;2C
+	RET
+	NOP
+	MOV	A,0ADH			;2D
+	RET
+	NOP
+	MOV	A,0AEH			;2E
+	RET
+	NOP
+	MOV	A,0AFH			;2F
+	RET
+	NOP
+	MOV	A,0B0H			;30
+	RET
+	NOP
+	MOV	A,0B1H			;31
+	RET
+	NOP
+	MOV	A,0B2H			;32
+	RET
+	NOP
+	MOV	A,0B3H			;33
+	RET
+	NOP
+	MOV	A,0B4H			;34
+	RET
+	NOP
+	MOV	A,0B5H			;35
+	RET
+	NOP
+	MOV	A,0B6H			;36
+	RET
+	NOP
+	MOV	A,0B7H			;37
+	RET
+	NOP
+	MOV	A,0B8H			;38
+	RET
+	NOP
+	MOV	A,0B9H			;39
+	RET
+	NOP
+	MOV	A,0BAH			;3A
+	RET
+	NOP
+	MOV	A,0BBH			;3B
+	RET
+	NOP
+	MOV	A,0BCH			;3C
+	RET
+	NOP
+	MOV	A,0BDH			;3D
+	RET
+	NOP
+	MOV	A,0BEH			;3E
+	RET
+	NOP
+	MOV	A,0BFH			;3F
+	RET
+	NOP
+	MOV	A,0C0H			;40
+	RET
+	NOP
+	MOV	A,0C1H			;41
+	RET
+	NOP
+	MOV	A,0C2H			;42
+	RET
+	NOP
+	MOV	A,0C3H			;43
+	RET
+	NOP
+	MOV	A,0C4H			;44
+	RET
+	NOP
+	MOV	A,0C5H			;45
+	RET
+	NOP
+	MOV	A,0C6H			;46
+	RET
+	NOP
+	MOV	A,0C7H			;47
+	RET
+	NOP
+	MOV	A,0C8H			;48
+	RET
+	NOP
+	MOV	A,0C9H			;49
+	RET
+	NOP
+	MOV	A,0CAH			;4A
+	RET
+	NOP
+	MOV	A,0CBH			;4B
+	RET
+	NOP
+	MOV	A,0CCH			;4C
+	RET
+	NOP
+	MOV	A,0CDH			;4D
+	RET
+	NOP
+	MOV	A,0CEH			;4E
+	RET
+	NOP
+	MOV	A,0CFH			;4F
+	RET
+	NOP
+	MOV	A,0D0H			;50
+	RET
+	NOP
+	MOV	A,0D1H			;51
+	RET
+	NOP
+	MOV	A,0D2H			;52
+	RET
+	NOP
+	MOV	A,0D3H			;53
+	RET
+	NOP
+	MOV	A,0D4H			;54
+	RET
+	NOP
+	MOV	A,0D5H			;55
+	RET
+	NOP
+	MOV	A,0D6H			;56
+	RET
+	NOP
+	MOV	A,0D7H			;57
+	RET
+	NOP
+	MOV	A,0D8H			;58
+	RET
+	NOP
+	MOV	A,0D9H			;59
+	RET
+	NOP
+	MOV	A,0DAH			;5A
+	RET
+	NOP
+	MOV	A,0DBH			;5B
+	RET
+	NOP
+	MOV	A,0DCH			;5C
+	RET
+	NOP
+	MOV	A,0DDH			;5D
+	RET
+	NOP
+	MOV	A,0DEH			;5E
+	RET
+	NOP
+	MOV	A,0DFH			;5F
+	RET
+	NOP
+	LJMP	Read_ACC		;60
+	NOP
+	MOV	A,0E1H			;61
+	RET
+	NOP
+	MOV	A,0E2H			;62
+	RET
+	NOP
+	MOV	A,0E3H			;63
+	RET
+	NOP
+	MOV	A,0E4H			;64
+	RET
+	NOP
+	MOV	A,0E5H			;65
+	RET
+	NOP
+	MOV	A,0E6H			;66
+	RET
+	NOP
+	MOV	A,0E7H			;67
+	RET
+	NOP
+	MOV	A,0E8H			;68
+	RET
+	NOP
+	MOV	A,0E9H			;69
+	RET
+	NOP
+	MOV	A,0EAH			;6A
+	RET
+	NOP
+	MOV	A,0EBH			;6B
+	RET
+	NOP
+	MOV	A,0ECH			;6C
+	RET
+	NOP
+	MOV	A,0EDH			;6D
+	RET
+	NOP
+	MOV	A,0EEH			;6E
+	RET
+	NOP
+	MOV	A,0EFH			;6F
+	RET
+	NOP
+	LJMP	Read_B			;70
+	NOP
+	MOV	A,0F1H			;71
+	RET
+	NOP
+	MOV	A,0F2H			;72
+	RET
+	NOP
+	MOV	A,0F3H			;73
+	RET
+	NOP
+	MOV	A,0F4H			;74
+	RET
+	NOP
+	MOV	A,0F5H			;75
+	RET
+	NOP
+	MOV	A,0F6H			;76
+	RET
+	NOP
+	MOV	A,0F7H			;77
+	RET
+	NOP
+	MOV	A,0F8H			;78
+	RET
+	NOP
+	MOV	A,0F9H			;79
+	RET
+	NOP
+	MOV	A,0FAH			;7A
+	RET
+	NOP
+	MOV	A,0FBH			;7B
+	RET
+	NOP
+	MOV	A,0FCH			;7C
+	RET
+	NOP
+	MOV	A,0FDH			;7D
+	RET
+	NOP
+	MOV	A,0FEH			;7E
+	RET
+	NOP
+	MOV	A,0FFH			;7F
+	RET
+	NOP
+
+$eject
+	; Special Function Register Write Commands
+	MOV	080H,data_low		;00
+	RET
+	MOV	081H,data_low		;01
+	RET
+	LJMP	Write_DPL		;02
+	RET
+	LJMP	Write_DPH		;03
+	RET
+	MOV	084H,data_low		;04
+	RET
+	MOV	085H,data_low		;05
+	RET
+	MOV	086H,data_low		;06
+	RET
+	MOV	087H,data_low		;07
+	RET
+	MOV	088H,data_low		;08
+	RET
+	MOV	089H,data_low		;09
+	RET
+	MOV	08AH,data_low		;0A
+	RET
+	MOV	08BH,data_low		;0B
+	RET
+	MOV	08CH,data_low		;0C
+	RET
+	MOV	08DH,data_low		;0D
+	RET
+	MOV	08EH,data_low		;0E
+	RET
+	MOV	08FH,data_low		;0F
+	RET
+	MOV	090H,data_low		;10
+	RET
+	MOV	091H,data_low		;11
+	RET
+	MOV	092H,data_low		;12
+	RET
+	MOV	093H,data_low		;13
+	RET
+	MOV	094H,data_low		;14
+	RET
+	MOV	095H,data_low		;15
+	RET
+	MOV	096H,data_low		;16
+	RET
+	MOV	097H,data_low		;17
+	RET
+	MOV	098H,data_low		;18
+	RET
+	MOV	099H,data_low		;19
+	NOP
+	MOV	09AH,data_low		;1A
+	RET
+	MOV	09BH,data_low		;1B
+	RET
+	MOV	09CH,data_low		;1C
+	RET
+	MOV	09DH,data_low		;1D
+	RET
+	MOV	09EH,data_low		;1E
+	RET
+	MOV	09FH,data_low		;1F
+	RET
+	MOV	0A0H,data_low		;20
+	RET
+	MOV	0A1H,data_low		;21
+	RET
+	MOV	0A2H,data_low		;22
+	RET
+	MOV	0A3H,data_low		;23
+	RET
+	MOV	0A4H,data_low		;24
+	RET
+	MOV	0A5H,data_low		;25
+	RET
+	MOV	0A6H,data_low		;26
+	RET
+	MOV	0A7H,data_low		;27
+	RET
+	MOV	0A8H,data_low		;28
+	RET
+	MOV	0A9H,data_low		;29
+	RET
+	MOV	0AAH,data_low		;2A
+	RET
+	MOV	0ABH,data_low		;2B
+	RET
+	MOV	0ACH,data_low		;2C
+	RET
+	MOV	0ADH,data_low		;2D
+	RET
+	MOV	0AEH,data_low		;2E
+	RET
+	MOV	0AFH,data_low		;2F
+	RET
+	MOV	0B0H,data_low		;30
+	RET
+	MOV	0B1H,data_low		;31
+	RET
+	MOV	0B2H,data_low		;32
+	RET
+	MOV	0B3H,data_low		;33
+	RET
+	MOV	0B4H,data_low		;34
+	RET
+	MOV	0B5H,data_low		;35
+	RET
+	MOV	0B6H,data_low		;36
+	RET
+	MOV	0B7H,data_low		;37
+	RET
+	MOV	0B8H,data_low		;38
+	RET
+	MOV	0B9H,data_low		;39
+	RET
+	MOV	0BAH,data_low		;3A
+	RET
+	MOV	0BBH,data_low		;3B
+	RET
+	MOV	0BCH,data_low		;3C
+	RET
+	MOV	0BDH,data_low		;3D
+	RET
+	MOV	0BEH,data_low		;3E
+	RET
+	MOV	0BFH,data_low		;3F
+	RET
+	MOV	0C0H,data_low		;40
+	RET
+	MOV	0C1H,data_low		;41
+	RET
+	MOV	0C2H,data_low		;42
+	RET
+	MOV	0C3H,data_low		;43
+	RET
+	MOV	0C4H,data_low		;44
+	RET
+	MOV	0C5H,data_low		;45
+	RET
+	MOV	0C6H,data_low		;46
+	RET
+	MOV	0C7H,data_low		;47
+	RET
+	MOV	0C8H,data_low		;48
+	RET
+	MOV	0C9H,data_low		;49
+	RET
+	MOV	0CAH,data_low		;4A
+	RET
+	MOV	0CBH,data_low		;4B
+	RET
+	MOV	0CCH,data_low		;4C
+	RET
+	MOV	0CDH,data_low		;4D
+	RET
+	MOV	0CEH,data_low		;4E
+	RET
+	MOV	0CFH,data_low		;4F
+	RET
+	MOV	0D0H,data_low		;50
+	RET
+	MOV	0D1H,data_low		;51
+	RET
+	MOV	0D2H,data_low		;52
+	RET
+	MOV	0D3H,data_low		;53
+	RET
+	MOV	0D4H,data_low		;54
+	RET
+	MOV	0D5H,data_low		;55
+	RET
+	MOV	0D6H,data_low		;56
+	RET
+	MOV	0D7H,data_low		;57
+	RET
+	MOV	0D8H,data_low		;58
+	RET
+	MOV	0D9H,data_low		;59
+	RET
+	MOV	0DAH,data_low		;5A
+	RET
+	MOV	0DBH,data_low		;5B
+	RET
+	MOV	0DCH,data_low		;5C
+	RET
+	MOV	0DDH,data_low		;5D
+	RET
+	MOV	0DEH,data_low		;5E
+	RET
+	MOV	0DFH,data_low		;5F
+	RET
+	LJMP	Write_ACC		;60
+	NOP
+	MOV	0E1H,data_low		;61
+	RET
+	MOV	0E2H,data_low		;62
+	RET
+	MOV	0E3H,data_low		;63
+	RET
+	MOV	0E4H,data_low		;64
+	RET
+	MOV	0E5H,data_low		;65
+	RET
+	MOV	0E6H,data_low		;66
+	RET
+	MOV	0E7H,data_low		;67
+	RET
+	MOV	0E8H,data_low		;68
+	RET
+	MOV	0E9H,data_low		;69
+	RET
+	MOV	0EAH,data_low		;6A
+	RET
+	MOV	0EBH,data_low		;6B
+	RET
+	MOV	0ECH,data_low		;6C
+	RET
+	MOV	0EDH,data_low		;6D
+	RET
+	MOV	0EEH,data_low		;6E
+	RET
+	MOV	0EFH,data_low		;6F
+	RET
+	LJMP	Write_B			;70
+	RET
+	MOV	0F1H,data_low		;71
+	RET
+	MOV	0F2H,data_low		;72
+	RET
+	MOV	0F3H,data_low		;73
+	RET
+	MOV	0F4H,data_low		;74
+	RET
+	MOV	0F5H,data_low		;75
+	RET
+	MOV	0F6H,data_low		;76
+	RET
+	MOV	0F7H,data_low		;77
+	RET
+	MOV	0F8H,data_low		;78
+	RET
+	MOV	0F9H,data_low		;79
+	RET
+	MOV	0FAH,data_low		;7A
+	RET
+	MOV	0FBH,data_low		;7B
+	RET
+	MOV	0FCH,data_low		;7C
+	RET
+	MOV	0FDH,data_low		;7D
+	RET
+	MOV	0FEH,data_low		;7E
+	RET
+	MOV	0FFH,data_low		;7F
+	RET
+
+	END

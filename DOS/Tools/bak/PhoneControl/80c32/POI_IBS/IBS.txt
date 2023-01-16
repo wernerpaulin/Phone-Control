@@ -1,0 +1,2 @@
+Diese Version ist lediglich zur Inbetriebnahme, da sie
+sich aus dem Prototypen tstrgV20 ergeben hat

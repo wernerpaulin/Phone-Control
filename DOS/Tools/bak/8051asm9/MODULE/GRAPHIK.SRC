@@ -1,0 +1,37 @@
+$DEBUG RB(0,1) XREF EP TITLE(......) DATE(Makro:DD)
+;
+NAME graphik
+;
+public balken,balken2 
+$include(display.ext)
+;
+graphik         segment code
+
+                rseg    graphik
+balkmask:       db      '4<            >6'
+
+balken:         push    acc
+                push    acc
+                mov     dptr,#balkmask
+                call    writestring
+                mov     a,#42h
+                call    setcursor
+                pop     acc
+loop:           push    acc
+                mov     a,#0ffh
+                call    writechar
+                pop     acc
+                djnz    acc,loop
+                pop     acc
+                ret
+
+balken2:        
+loop2:          mov     a,#0ffh
+                call    writechar
+                djnz    r2,loop2
+                mov     r0,#16
+loop3:          mov     a,#' '
+                call    writechar
+                djnz    r0,loop3
+                ret
+                end

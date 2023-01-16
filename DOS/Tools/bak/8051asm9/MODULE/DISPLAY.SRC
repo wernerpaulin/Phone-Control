@@ -1,0 +1,176 @@
+$DEBUG RB(0,1) XREF EP TITLE(......) DATE(Makro:DD)
+;
+NAME display
+;
+public WriteChar,WriteString,Clear,Home,DisplayOff,DisplayOn,CursorLeft,CursorRight
+public DisplayRight,DisplayLeft,Line1,Line2,GetBusyFlag,SetCursor,NumConvert,InitLCD
+
+lcdram          equ     0fc00h
+
+display         segment code
+
+                rseg    display
+
+SendLCDData40:  MOV     DPTR,#lcdram    
+                MOVX    @DPTR,A
+                mov     A,#20               ;warte 40æs
+                djnz    ACC,$               ;warten
+                RET
+
+SendLCDData1640:MOV     DPTR,#lcdram
+                MOVX    @DPTR,A
+                mov     A,#210              ;warte 420æs
+                djnz    ACC,$               ;warten
+                mov     A,#210              ;warte 420æs
+                djnz    ACC,$               ;warten
+                mov     A,#210              ;warte 420æs
+                djnz    ACC,$               ;warten
+                mov     A,#210              ;warte 420æs
+                djnz    ACC,$               ;warten
+                RET
+
+WriteChar:      MOV     DPTR,#lcdram+1
+                PUSH    ACC
+                MOVX    @DPTR,A           ;Zeichen auf Display schreiben
+                MOV     DPTR,#lcdram+2    ;Auslesemodus       
+Poll:           MOVX    A,@DPTR                 
+                JB      ACC.7,Poll        ;Warten bis Busyflag=0     
+                POP     ACC
+                RET
+
+WriteString:    PUSH    ACC
+                MOV     A,#16
+Loop:           PUSH    ACC
+                CLR     A
+                MOVC    A,@A+DPTR
+                INC     DPTR
+                PUSH    DPL
+                PUSH    DPH
+                CALL    WriteChar
+                POP     DPH
+                POP     DPL
+                POP     ACC
+                DJNZ    ACC,Loop
+                POP     ACC
+                RET
+
+Clear:          PUSH    ACC
+                MOV     A,#00000001B      ;Display l”schen
+                CALL    SendLCDData1640
+                POP     ACC
+                RET
+
+Home:           PUSH    ACC
+                MOV     A,#00000010B      ;Home Position
+                CALL    SendLCDData1640
+                POP     ACC
+                RET               
+
+DisplayOFF:     PUSH    ACC
+                MOV     A,#00001000B      ;Display OFF
+                CALL    SendLCDData40
+                POP     ACC
+                RET               
+
+DisplayON:      PUSH    ACC
+                MOV     A,#00001100B      ;Display ON
+                CALL    SendLCDData40
+                POP     ACC
+                RET
+
+CursorON:       PUSH    ACC
+                MOV     A,#00001110B      ;Cursor ON
+                CALL    SendLCDData40
+                POP     ACC
+                RET               
+
+CursorOFF:      PUSH    ACC
+                MOV     A,#00001100B      ;Cursor OFF
+                CALL    SendLCDData40
+                POP     ACC
+                RET               
+
+CursorLeft:     PUSH    ACC
+                MOV     A,#00010000B      ;Cursor LEFT
+                CALL    SendLCDData40
+                POP     ACC
+                RET               
+
+CursorRight:    PUSH    ACC
+                MOV     A,#00010100B      ;Cursor RIGHT
+                CALL    SendLCDData40
+                POP     ACC
+                RET               
+
+DisplayLeft:    PUSH    ACC
+                MOV     A,#00011000B      ;Display LEFT
+                CALL    SendLCDData40
+                POP     ACC
+                RET               
+
+DisplayRight:   PUSH    ACC
+                MOV     A,#00011100B      ;Display RIGHT
+                CALL    SendLCDData40
+                POP     ACC
+                RET               
+
+Line1:          PUSH    ACC
+                MOV     A,#10000000B      ;Adresse fuer 1. Zeile
+                CALL    SendLCDData40
+                POP     ACC
+                RET               
+
+Line2:          PUSH    ACC
+                MOV     A,#11000000B      ;Adresse fuer 2. Zeile
+                CALL    SendLCDData40
+                POP     ACC
+                RET               
+
+GetBusyFlag:    PUSH    ACC
+                MOV     DPTR,#lcdram+2    ;Auslesemodus
+                MOVX    A,@DPTR    
+                MOV     C,ACC.7           ;BusyFlag ins Carry
+                POP     ACC
+                RET
+
+SetCursor:      PUSH    ACC
+                ORL     A,#10000000B      ;DD-Ram Adresse setzen
+                CALL    SendLCDData40
+                POP     ACC
+                RET               
+
+NumConvert:     ORL     A,#00110000B      ;Zahl konvertieren
+                ANL     A,#00111111B
+                RET
+
+
+
+
+FunctionSet:    MOV     A,#00111000b      ;Function SET
+                CALL    SendLCDData40
+                RET
+
+EntryMode:      MOV     A,#00000110b      ;Entry mode
+                CALL    SendLCDData40
+                RET
+
+InitLCD:        MOV     R1,#high(8000)
+x16ms:          MOV     R2,#0ffh
+                DJNZ    R2,$              ;warte 16ms
+                DJNZ    R1,x16ms
+                CALL    FunctionSet
+                MOV     R1,#high(3000)
+x6ms:           MOV     R2,#0ffh
+                DJNZ    R2,$
+                DJNZ    R1,x6ms           ;warte 6ms
+                CALL    FunctionSet
+                MOV     R1,#200
+                DJNZ    R1,$              ;warte 400æs
+                CALL    FunctionSet
+                CALL    EntryMode
+                CALL    DisplayOn
+                CALL    Clear
+                RET
+
+                                                
+                end

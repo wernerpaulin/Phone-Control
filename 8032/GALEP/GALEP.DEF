@@ -1,0 +1,286 @@
+; Letzte Aenderungen:
+
+; 12.04.1991 Kommentare f. 8751 (JCL)
+; 20.06.1991 Intel 27C128..C512 (JCL)
+; 03.07.1991 AMD 2864 (BE/JCL)
+; 01.04.1992 Verify,SaveParameters,TypNummer,ColorMode   (BE)
+; 16.02.1995 Exel 2816 vom Atmel-Typ modifiziert;EEPROM L”schen darf 
+;            hier nicht verwendet werden.	
+; 22.01.1995 28F0x0A, 8752BH (WS)
+; 26.04.1995 89C52 (WS)
+; 05.05.1995 SGS-Thomson EPROM-Typen eingetragen (WS).
+; 25.09.1995 Texas EPROMs ge„ndert (WS).
+; 28.09.1995 AMD EPROMs eingetragen (WS).
+; 07.11.1995 Xicor 28C64 und AT 29C040A eingetragen (WS).
+; 25.01.1996 Atmel 28C256 eingetragen (WS).
+;
+; Der niedrigste Defaulttyp ist die Nummer 1 und nicht wie bisher 0
+; Žnderung aus Kompatibilit„t zur Typanzeigezeile und -t Option
+;
+; Diese Datei wird beim Start des Programms GALEP eingelesen. Sie
+; kann vom Benutzer geaendert werden, um GALEP entsprechend eigenen
+; Wuenschen zu konfigurieren.
+;
+; Kommentarzeilen beginnen mit einem Semikolon.
+; Eine Zeile, die mit * beginnt, definiert die Installationsdaten.
+; Jede andere Zeile definiert einen Epromtyp.
+; In beiden Faellen muss das Zeilenformat eingehalten werden.
+;---------------------------------------------------------------------
+; INSTALLATONSDATEN
+;
+;1. LPT: Nr des Drucker-Ports, an den GALEP angeschlossen ist. LPT1: - LPT4:
+;2. Typ: Aktiver Eprom-Gal Typ (Zeilennummer) beim Start des Programms
+;3. Maximale Groesse des Datenpuffers in Bytes (hexadezimal, C-Notation)
+;4: Verify 1 bzw. 0          Wenn gesetzt, wird nach dem Programmieren
+;                            automatisch verglichen
+;5: SaveParameters 1 bzw. 0  Bei Programmende werden die Parameter und Typ
+;                            in GALEP.PRM gespeichert und beim
+;		                         n„chsten Start automatisch gelesen.
+;6: ColorMode 0: Schwarz-Weiss  1:Monochrome VGA  2:Farbe VGA
+;7: WildCards definiert die Dateien der Dateiauswahlbox
+;   (z.B.: *.* -> alle Dateien werden in der Auswahlbox angezeigt)
+
+; LPT  Typ MaxBufferSize  Verify  SaveParameters ColorMode WildCards
+*  1,   13,  0x80000,        1,          1,          2,      *.*
+;---------------------------------------------------------------------
+;TYPENBIBLIOTHEK
+;
+;1. NAME des Eproms (max. 15 Zeichen). Die weiteren Eintraege
+;   muessen ab Spalte 17 beginnen und werden durch Komma getrennt.
+;   Fr die Typen ohne Herstellerbezeichnung wurden die Intel-Daten
+;   eingetragen.
+;
+;2. VCC (Programmieren): 0=6.35,  1=5.85,  2=5.50,  3=5.15 Volt,
+;                        7=5,15 Volt (aktiv, solange GALEP.EXE laeuft)
+;
+;3. VPP: 0=5.00,   1=12.00,   2=12.00,   3=12.00,   4=12.00,   5=12.50,
+;        6=13.50,  7=16.50,   8=12.00,   9=12.50,  10=13.50,  11=16.50,
+;       12=14.00, 13=16.50,  14=16.50,  15=21.0,
+;       16=12.00, 17=12.50,  18=13.50,  19=14.00,  20=14.50,  21=15.00
+;       22=16.00, 23=16.50,  24=20.50,  25=21.00,  26=22.00,  27=22.50,
+;       28=23.00, 29=23.50,  30=24.50,  31=25.00,  32=5.00 Volt
+;
+; ACHTUNG: VPP bei 5V-EEPROMs gibt die Spannung zum Loeschen und nicht
+;          zum Programmieren an.
+;
+;4. PINOUT: 0=2764/27128, 1=8764, 2=27256, 3=27512, 4=27010/27020,
+;           5=27040,      6=27256 (*),     7=27040 (*),
+;           8=27513,      9=27011,
+;          10=Memory Card (mit Adapter),  11=Flash-EEPROM 28Fxxx,
+;          12=8751xx (mit Adapter),       13=EEPROM 2864 (/DATA-Polling),
+;          14=29F010,   15=HD647180 (mit Adapter),
+;          16=EEPROM 28C256 (/DATA-Polling), 17=PEROM 29C256 (/DATA-Polling),
+;          18=2716,     19=2732,      20=28C16 (/Data-Polling),
+;          21=PEROM 29C512/010 (/DATA-Polling)
+;          22=GAL16V8,  23=wie 22,    24=GAL20V8, 25=wie 24,    26=GAL22V10,
+;          27=GAL18V10, 28=GAL20RA10, 29=GAL6001
+;          30=RAM8K,    31=RAM32K,    32=RAM128K
+;          34=8951 (mit Adapter),     35=278001,  36=29C020,    37=29C040
+;          38=28F010A,  39=8752BH
+;
+;   (*) 27256- und 27040-Eproms: Bei einigen 32K*8/512K*8-Eproms
+;   muss in der Betriebsart 'Verify' das Signal /CS aktiviert (low) werden.
+;   Pinout fuer diese Bausteine ist 6 bzw. 7. Bei Pinout 2 bleibt /CS
+;   nach dem Programmierimpuls inaktiv (high).
+;   Bei den meisten 32K*8-Bausteinen ist bei Verify der Zustand von /CS
+;   egal. Fuer diese Typen sollte Pinout 2 gewaehlt werden, da dieser
+;   Algorithmus etwas schneller ist.
+;
+;5. KBYTE: Bausteingroesse in KByte.
+;
+;6. IMP: Programmierimpulsbreite in Millisekunden, wenn IMP > 0,
+;                                in Mikrosekunden, wenn IMP < 0.
+;
+;7. NMAX: maximale Anzahl der Programmierimpulse pro Byte.
+;
+;8. NF: Ueberprogrammierfaktor. Wenn nach N Programmierimpulsen das Byte
+;   im Eprom steht, wird sicherheitshalber ein weiterer Programmierimpuls
+;   der Breite (N * NF * IMP) angelegt.
+;
+;9. FAIL: 0 = Abbruch mit Fehlermeldung, wenn nach NMAX Impulsen
+;             das Byte noch falsch ist.
+;         1 = Es wird erst noch ein weiterer Impuls der Breite (N * NF * IMP)
+;             angelegt, bevor auf Programmierfehler erkannt wird.
+;
+;10. EMPTY: Inhalt einer geloeschten Speicherstelle (0 oder 255).
+;
+;Format der Eintraege:
+;
+;Name,          vcc, vpp, pinout, KByte, imp,  nmax, nf, fail, empty
+;-------------------------------------------------------------------
+ 2716           3,   31,  18,     2,     50,     0,   0,  0,    255
+ 27C16          0,   17,  18,     2,   -100,    25,   3,  0,    255
+ 2732A          3,   25,  19,     4,     50,     0,   0,  0,    255
+ 27C32          0,   17,  19,     4,   -100,    25,   3,  0,    255
+ 2764           1,   15,  0,      8,      1,    25,   3,  0,    255
+ 2764A          1,   5,   0,      8,      1,    25,   3,  0,    255
+ 27C64          0,   9,   0,      8,   -100,    25,   0,  0,    255
+ 87C64          0,   9,   1,      8,   -100,    25,   0,  0,    255
+ 27128          1,   15,  0,     16,      1,    25,   3,  0,    255
+ 27128A         1,   5,   0,     16,      1,    25,   3,  0,    255
+ 27C128         1,   5,   0,     16,   -100,    25,   3,  0,    255
+ 27256          1,   5,   2,     32,      1,    25,   3,  0,    255
+ 27C256         0,   5,   2,     32,   -100,    25,   3,  0,    255
+ 87C257         0,   5,   2,     32,   -100,    25,   0,  0,    255
+ 27512          1,   5,   3,     64,      1,    25,   3,  0,    255
+ 27C512         1,   5,   3,     64,   -100,    25,   3,  0,    255
+ 27513          1,   5,   8,     64,      1,    25,   3,  0,    255
+ 27C513         1,   5,   8,     64,   -100,    25,   3,  0,    255
+ 27011          1,   9,   9,    128,   -100,    25,   0,  0,    255
+ 27C011         1,   9,   9,    128,   -100,    25,   0,  0,    255
+ 27010          0,   9,   4,    128,   -100,    25,   0,  0,    255
+ 27C010         0,   9,   4,    128,   -100,    25,   0,  0,    255
+ 27020          0,   9,   4,    256,   -100,    25,   0,  0,    255
+ 27C020         0,   9,   4,    256,   -100,    25,   0,  0,    255
+ 27C040         0,   9,   5,    512,   -100,    25,   0,  0,    255
+
+ 2864           3,   6,  13,      8,      0,     0,   0,  0,    255
+ 28C256         3,   0,  16,     32,      0,     0,   0,  0,    255
+ 28F256         3,   3,  11,     32,   -100,    25,   0,  0,    255
+ 28F512         3,   3,  11,     64,   -100,    25,   0,  0,    255
+ 28F010         3,   3,  11,    128,    -10,    25,   0,  0,    255
+ 28F020         3,   3,  11,    256,    -10,    25,   0,  0,    255
+ 28F101         3,   3,  11,    128,    -25,    25,   0,  0,    255
+
+AM 27C64        1,   9,   0,      8,      1,    25,   1,  0,    255
+AM 27C128       1,   9,   0,     16,      1,    25,   1,  0,    255
+AM 27C256       1,   9,   2,     32,      1,    25,   1,  0,    255
+AM 27C512       1,   9,   3,     64,      1,    25,   1,  0,    255
+AM 27C010       1,   9,   4,    128,   -500,    25,   1,  0,    255
+AM 27C020       1,   9,   4,    256,   -500,    25,   1,  0,    255
+AM 27C040       1,   9,   5,    512,   -500,    25,   1,  0,    255
+
+AM 2864AE       3,   6,  13,      8,      0,     0,   0,  0,    255
+AM 2864BE       3,   6,  13,      8,      0,     0,   0,  0,    255
+AM 28C256       3,   0,  16,     32,      0,     0,   0,  0,    255
+AM 28F256       3,   3,  11,     32,   -100,    25,   0,  0,    255
+AM 28F512       3,   3,  11,     64,   -100,    25,   0,  0,    255
+AM 28F010       3,   3,  11,    128,    -10,    25,   0,  0,    255
+AM 28F010A      3,   3,  38,    128,      0,     0,   0,  0,    255
+AM 28F020       3,   3,  11,    256,    -10,    25,   0,  0,    255
+AM 28F020A      3,   3,  38,    256,      0,     0,   0,  0,    255
+AM 29F010       3,   0,  14,    128,      0,     0,   0,  0,    255
+AM 29F040       3,   0,  14,    512,      0,     0,   0,  0,    255
+
+Atmel 27HC64    1,   5,   0,      8,      1,    25,   3,  0,    255
+Atmel 27HC256   1,   5,   2,     32,      1,    25,   3,  0,    255
+Atmel 27C256    1,   5,   2,     32,      1,    25,   3,  0,    255
+Atmel 27C512    1,   5,   3,     64,      1,    25,   3,  0,    255
+Atmel 27C513    1,   5,   8,     64,      1,    25,   3,  0,    255
+Atmel 28C16     3,  16,  20,      2,      0,     0,   0,  0,    255
+Atmel 28C256    3,   3,  13,      32,     0,     0,   0,  0,    255
+Atmel 29C256    3,   0,  17,     32,      0,     0,   0,  0,    255
+Atmel 29C512    3,   0,  21,     64,      0,     0,   0,  0,    255
+Atmel 29C010    3,   0,  21,    128,      0,     0,   0,  0,    255
+Atmel 29C020    3,   0,  36,    256,      0,     0,   0,  0,    255
+Atmel 29C040    3,   0,  37,    512,      0,     0,   0,  0,    255
+Atmel 29C040A   3,   0,  40,    512,      0,     0,   0,  0,    255
+
+;EXEL 2816       3,   0,  20,      2,      0,     0,   0,  0,    255
+EXEL 2864A      3,  11,  13,      8,      0,     0,   0,  0,    255
+EXEL 2865A      3,  11,  13,      8,      0,     0,   0,  0,    255
+EXEL 28C64      3,   3,  13,      8,      0,     0,   0,  0,    255
+EXEL 28C256     3,   0,  16,     32,      0,     0,   0,  0,    255
+
+Fuji 2764       1,   15,  0,      8,      1,    20,   1,  0,    255
+Fuji 27C64      1,   15,  0,      8,      1,    20,   1,  0,    255
+Fuji 27128      1,   15,  0,     16,      1,    20,   1,  0,    255
+Fuji 27C128     1,   15,  0,     16,      1,    20,   1,  0,    255
+Fuji 27256      1,   5,   2,     32,      1,    25,   3,  0,    255
+Fuji 27C256     1,   15,  6,     32,      1,    20,   1,  1,    255
+Fuji 27C512     1,   5,   3,     64,      1,    25,   3,  1,    255
+
+Fuji 28C64      3,   6,  13,      8,      0,     0,   0,  0,    255
+
+Hitachi 2764    1,   15,  0,      8,      1,    15,   4,  1,    255
+Hitachi 27C64   1,   15,  0,      8,      1,    15,   4,  1,    255
+Hitachi 27128   1,   5,   0,     16,      1,    25,   3,  0,    255
+Hitachi 27C128  1,   5,   0,     16,      1,    25,   3,  0,    255
+Hitachi 27256   1,   5,   2,     32,      1,    25,   3,  0,    255
+Hitachi 27C256  1,   5,   2,     32,      1,    25,   3,  0,    255
+Hitachi 27512   1,   5,   3,     64,      1,    25,   3,  0,    255
+Hitachi 27C512  1,   5,   3,     64,      1,    25,   3,  0,    255
+Hitachi 27C101  1,   5,   4,    128,      1,    25,   3,  0,    255
+Hitachi 27C201  1,   5,   4,    256,      1,    25,   3,  0,    255
+Hitachi 27C401  1,   5,   5,    512,      1,    25,   3,  0,    255
+
+Hitachi 58064   0,   0,   0,      8,     10,     1,   0,  0,    255
+
+NEC   2764      1,   15,  0,      8,      1,    15,   4,  1,    255
+NEC   27C64     1,   15,  0,      8,      1,    15,   4,  1,    255
+NEC   27128     1,   15,  0,     16,      1,    15,   4,  1,    255
+NEC   27C128    1,   15,  0,     16,      1,    15,   4,  1,    255
+NEC   27256     1,   15,  6,     32,      1,    15,   4,  1,    255
+NEC   27C256    1,   15,  2,     32,      1,    15,   4,  1,    255
+NEC   27C512    1,   15,  3,     64,      1,    15,   4,  1,    255
+NEC   27C1001   0,   5,   4,    128,   -100,    10,   0,  0,    255
+NEC   27C2001   0,   5,   4,    256,   -100,    10,   0,  0,    255
+NEC   27C4001   0,   5,   5,    512,   -100,    10,   0,  0,    255
+NEC   27C8001   0,   5,  35,   1024,    -50,    10,   0,  0,    255
+
+Samsung 28C256  3,   0,  16,     32,      0,     0,   0,  0,    255
+
+SEEQ  27C256    1,   5,   2,     32,   -450,    25,   3,  1,    255
+
+Sign. 27C256    1,   5,   2,     32,   -500,    25,   3,  0,    255
+Sign. 27C512    1,   5,   3,     64,      1,    25,   3,  0,    255
+SST   28EE011   3,   0,  21,    128,      0,     0,   0,  0,    255
+
+ST 2716         3,   31,  18,     2,     50,     0,   0,  0,    255
+ST 2732A        3,   25,  19,     4,     50,     0,   0,  0,    255
+ST 2764         1,   15,  0,      8,      1,    15,   4,  0,    255
+ST 2764A        1,   5,   0,      8,      1,    25,   3,  0,    255
+ST 27C64A       1,   9,   0,      8,      1,    25,   3,  0,    255
+ST 27128A       1,   5,   0,     16,      1,    25,   3,  0,    255
+ST 27256        1,   5,   2,     32,      1,    25,   3,  0,    255
+ST 27C256B      0,   5,   2,     32,   -100,    25,   0,  0,    255
+ST 87C257       0,   5,   2,     32,   -100,    25,   0,  0,    255
+ST 27512        1,   5,   3,     64,      1,    25,   3,  0,    255
+ST 27C512       0,   5,   3,     64,   -100,    25,   0,  0,    255
+ST 27C1001      0,   5,   4,    128,   -100,    25,   0,  0,    255
+ST 27C2001      0,   5,   4,    256,   -100,    25,   0,  0,    255
+ST 27C4001      0,   5,   5,    512,   -100,    25,   0,  0,    255
+
+
+Texas 27C128    1,   5,   0,     16,      1,    25,   3,  0,    255
+
+TMS 27C256      0,   5,   2,     32,   -100,    25,   0,  0,    255
+TMS 27C512      0,   5,   3,     64,   -100,    25,   0,  0,    255
+
+WaSc. 57C64     3,   6,   0,      8,      3,     4,   0,  0,    255
+WaSc. 57C128    3,   6,   0,     16,      5,     4,   0,  0,    255
+WaSc. 57C256    3,   6,   2,     32,      5,     4,   0,  0,    255
+
+Xicor 28C64     3,   0,  16,     8,       0,     0,   0,  0,    255
+Xicor 28C256    3,   0,  16,     32,      0,     0,   0,  0,    255
+
+GAL 16V8        3,   7,  22,      0,     10,     0,   0,  0,      0
+GAL 18V10       3,   7,  27,      0,     10,     0,   0,  0,      0
+GAL 20V8        3,   7,  24,      0,     10,     0,   0,  0,      0
+GAL 20RA10      3,   7,  28,      0,     10,     0,   0,  0,      0
+GAL 22V10       3,   7,  26,      0,     10,     0,   0,  0,      0
+GAL 6001        3,   7,  29,      0,     10,     0,   0,  0,      0
+
+ 8751H          3,  15,  12,      4,     50,     1,   0,  0,    255
+ 8751BH         3,   9,  12,      4,   -100,    25,   0,  0,    255
+ 87C51          3,   9,  12,      4,   -100,    25,   0,  0,    255
+ 87C51FA        3,   9,  12,      8,   -100,    25,   0,  0,    255
+ 87C51FB        3,   9,  12,     16,   -100,    25,   0,  0,    255
+ 87C51FC        3,   9,  12,     32,   -100,     5,   0,  0,    255
+ 8752BH         3,   9,  39,      8,   -100,    25,   0,  0,    255
+ATMEL 8951      3,   8,  34,      4,      2,     1,   0,  0,    255
+ATMEL 89C52/12v 3,   8,  34,      8,      2,     1,   0,  0,    255
+ATMEL 89C52/5v  3,   0,  34,      8,      2,     1,   0,  0,    255
+
+HD 647180       1,   5,  15,     16,      1,    25,   3,  0,    255
+
+RAM   8k        3,   0,  30,      8,      0,     2,   0,  0,      0
+RAM  32k        3,   0,  31,     32,      0,     2,   0,  0,      0
+RAM 128k        3,   0,  32,    128,      0,     2,   0,  0,      0
+
+MemCard 32K     3,   0,  10,     32,    -50,     2,   0,  0,      0
+MemCard 64K     3,   0,  10,     64,    -50,     2,   0,  0,      0
+MemCard 128K    3,   0,  10,    128,    -50,     2,   0,  0,      0
+MemCard 256K    3,   0,  10,    256,    -50,     2,   0,  0,      0
+MemCard 512K    3,   0,  10,    512,    -50,     2,   0,  0,      0
+

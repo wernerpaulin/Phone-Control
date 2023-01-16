@@ -1,0 +1,53 @@
+/*
+/* Stimmulus zum Test der Teste51 Stimulus Funktion
+/*
+
+; Byte-Zuweisung fÅr Ports
+; Hexadezimale Schreibweisen sind 0xFF, 0FFh oder $FF
+;
+P0=0FFh,        P1=0xff,        P2 = $0FF
+;
+;       Verzîgerung um 10 Maschinenzyklen
+;
+delay=10
+P0=0,   P1=055h,        P2 = 0AAh,      P3=03Ch
+delay=10
+;
+; Portbits wird 0 oder 1 zugewiesen
+;
+P0.0=0
+delay = 5
+P0.0=1
+delay = 5
+P1.1 = 0
+delay = 5
+P1.1 = 1
+delay=5
+P1.0 = 0
+;
+;       warten bis Portbit den angegebenen Wert enthÑlt
+;
+wait P1.0=1
+P4 = 0
+delay = 4
+P4 = 055h
+;
+;
+wait P1.0=0
+;
+;
+delay = 4
+P4 = 0AAh
+delay = 4
+
+AD0 = 0.01, AD1=0.1, AD2=0.2, AD3=0.3
+delay = 10
+AD4 = 0.4, AD5=0.5,  AD6=0.6, AD7=0.7
+AD0= 0.99
+AD8 = 0.8, AD9=0.9,  AD10=1.0, AD11=1.1
+delay = 10
+
+wait p3.3=1,  break
+
+
+

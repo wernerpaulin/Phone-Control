@@ -1,0 +1,648 @@
+MCS-51 MACRO ASSEMBLER    TERM                                                                      27.Dezemb  PAGE    1
+
+
+DOS 6.22 (038-N) MCS-51 MACRO ASSEMBLER, V2.3
+OBJECT MODULE PLACED IN TERM.OBJ
+ASSEMBLER INVOKED BY:  C:\RND\ASM\ASM51.EXE TERM.SRC
+                       
+
+LOC  OBJ            LINE     SOURCE
+
+                       1     $DEBUG RB(0) XREF EP TITLE(TERM) DATE(27.Dezember 2006) REGISTERBANK(0,1,2,3);
+                       2     NAME TERM
+                       3     ;****************************************************************************;
+                       4     ;   Copyright:  2006  Werner Paulin                                          ;
+                       5     ;****************************************************************************;
+                       6     ;   Identification:                                                          ;
+                       7     ;       Function     Simple Terminal Program                                 ;
+                       8     ;       Filename     TERM.src                                                ;
+                       9     ;****************************************************************************;
+                      10     ;   History:                                                                 ;
+                      11     ;   Version     Date        Author          Remarks                          ;
+                      12     ;   01.00       27.12.06    W. Paulin       created                          ;
+                      13     ;                                                                            ;
+                      14     ;****************************************************************************;
+                      15     ; Description:                                                               ;
+                      16     ; Port assignment:                                                           ;
+                      17     ;                 P1.0: Relais contact 1                                     ;
+                      18     ;                 P1.1: Relais contact 2                                     ;
+                      19     ;                 P1.2: Relais contact 3                                     ;
+                      20     ;                 P1.3: Relais contact 4                                     ;
+                      21     ;                                                                            ;
+                      22     ; Register assignment:                                                       ;
+                      23     ;                 *** bank 0 (RS1 = 0, RS0 = 0) ***                          ;
+                      24     ;                 R0: Serial port init wait time                             ;
+                      25     ;                 R1: ...                                                    ;
+                      26     ;                                                                            ;
+                      27     ;                 *** bank 1 (RS1 = 0, RS0 = 1) ***                          ;
+                      28     ;                 R0: pointer for indirect addressing                        ;
+                      29     ;                 R1: number of bytes copied with indirect addressing        ;
+                      30     ;                                                                            ;
+                      31     ;****************************************************************************;
+                      32     
+                      33     
+                      34     ;************************** SEGMENT NAMES ***********************************;
+                      35     ?STACK          SEGMENT IDATA           ; stack
+                      36     RX_BUFFER       SEGMENT IDATA           ; internal data memory (above 0x30)
+                      37     VAR_BIT         SEGMENT BIT             ; internal bit data
+                      38     
+                      39     PRGM_MAIN       SEGMENT CODE            ; main program
+                      40     PRGM_CALC       SEGMENT CODE            ; calculate according to rx-frame content
+                      41     
+                      42     PRGM_IRQ_EXTI0  SEGMENT CODE            ; external IRQ
+                      43     PRGM_IRQ_TIMER0 SEGMENT CODE            ; timer 0 IRQ
+                      44     PRGM_IRQ_TIMER1 SEGMENT CODE            ; timer 1 IRQ
+                      45     PRGM_IRQ_SINT   SEGMENT CODE            ; serial com IRQ
+                      46     
+                      47     
+                      48     ;************************ MEMORY ALLOCATION *********************************;
+----                  49                     RSEG    ?STACK
+0000                  50                     DS      20
+MCS-51 MACRO ASSEMBLER    TERM                                                                      27.Dezemb  PAGE    2
+
+
+LOC  OBJ            LINE     SOURCE
+
+                      51     
+----                  52                     RSEG    RX_BUFFER
+0000                  53                     DS      64
+                      54     
+----                  55                     RSEG    VAR_BIT
+0000                  56                     DBIT    20
+                      57     
+                      58     
+                      59     ;******************* RESET AND INTERRUPT VECTORS ****************************;
+----                  60                     CSEG    AT      RESET
+0000 020000   F       61                     LJMP    MAIN
+                      62     
+----                  63                     CSEG    AT      EXTI0
+0003 020000   F       64                     LJMP    IRQ_EXTI0
+                      65     
+----                  66                     CSEG    AT      TIMER0
+000B 020000   F       67                     LJMP    IRQ_TIMER0
+                      68     
+----                  69                     CSEG    AT      TIMER1
+001B 020000   F       70                     LJMP    IRQ_TIMER1
+                      71     
+----                  72                     CSEG    AT      SINT
+0023 020000   F       73                     LJMP    IRQ_SINT
+                      74     
+                      75     
+                      76     ;****************** TIMER 2 - 8032 ONLY -> MANUAL DEFINITION *****************;
+  00C8                77     T2CON           DATA    0C8H
+  00CF                78     TF2             BIT     0CFH
+  00CE                79     EXF2            BIT     0CEH
+  00CD                80     RCLK            BIT     0CDH
+  00CC                81     TCLK            BIT     0CCH
+  00CB                82     EXEN2           BIT     0CBH
+  00CA                83     TR2             BIT     0CAH
+  00C9                84     C_T2            BIT     0C9H
+  00C8                85     CP_RL2          BIT     0C8H
+  00CA                86     RCAP2L          DATA    0CAH
+  00CB                87     RCAP2H          DATA    0CBH
+  00CD                88     TH2             DATA    0CDH
+  00CC                89     TL2             DATA    0CCH
+  00AD                90     ET2             BIT     0ADH
+                      91     
+                      92     
+                      93     ;************************** VARIABLES / SYMBOLS *****************************;
+  0000                94     RX_PROGRES      BIT     0                       ; receiving of frame in progres
+  0001                95     TX_PROGRES      BIT     1                       ; tramission of frame in progres
+  0090                96     REL_CO1         BIT     P1.0
+  0091                97     REL_CO2         BIT     P1.1
+  0092                98     REL_CO3         BIT     P1.2
+  0093                99     REL_CO4         BIT     P1.3 
+                     100     
+                     101     ;******************************* CONSTANTS **********************************;
+  000D               102     CHAR_CR         EQU      0DH                     ; carriage return
+  000A               103     MAX_RX_BYTES    EQU      10D                     ; max. rx-buffer size
+                     104     
+                     105     
+MCS-51 MACRO ASSEMBLER    TERM                                                                      27.Dezemb  PAGE    3
+
+
+LOC  OBJ            LINE     SOURCE
+
+                     106     
+                     107     ;****************************************************************************;
+                     108     ; MACRO:        T0_INIT(SETTIME)                                             ;
+                     109     ; Remarks:      loads timer #0 and starts it                                 ;
+                     110     ;                                                                            ;
+                     111     ; Parameter:    SETTIME ...time to elapse                                    ;
+                     112     ;****************************************************************************;
+                     113     
+                     114     
+                     115     ;****************************************************************************;
+                     116     ; MACRO:        T1_INIT(SETTIME)                                             ;
+                     117     ; Remarks:      loads timer #1 and starts it                                 ;
+                     118     ;                                                                            ;
+                     119     ; Parameter:    SETTIME ...time to elapse                                    ;
+                     120     ;****************************************************************************;
+                     121     
+                     122     
+                     123     ;****************************************************************************;
+                     124     ; MACRO:        REGBANK(BANKNR)                                              ;
+                     125     ; Remarks:      activates a register bank                                    ;
+                     126     ;                                                                            ;
+                     127     ; Parameter:    BANKNR  ...number of bank to be activated                    ;
+                     128     ;****************************************************************************;
+                     129     
+                     130     
+                     131     ;****************************************************************************;
+                     132     ; MACRO:        SEND_CHAR(CHAR)                                              ;
+                     133     ; Remarks:      Sends 1 character through serial port without interrupt      ;
+                     134     ;                                                                            ;
+                     135     ; Parameter:    CHAR ...character to be sent                                 ;
+                     136     ;****************************************************************************;
+                     137     
+                     138     
+                     139     
+                     140     
+                     141     ;****************************************************************************;
+                     142     ; IRQ SERVICE ROUTINE:  External Interrupt                                   ;
+                     143     ; Remarks:              to be defined...                                     ;
+                     144     ;****************************************************************************;
+----                 145                     RSEG    PRGM_IRQ_EXTI0
+0000 C2AF            146     IRQ_EXTI0:      clr     ea                      ; block all interrupts
+0002 C0E0            147                     push    ACC                     ; stack accu
+0004 C0D0            148                     push    PSW                     ; stack register bank
+                     149     
+                     150                     ; do something here
+                     151     
+0006 D0D0            152                     pop     PSW                     ; restore register bank data
+0008 D0E0            153                     pop     ACC                     ; restore accu
+000A D2AF            154                     setb    ea                      ; enable all interrupts
+000C 32              155                     RETI
+                     156     
+                     157     
+                     158     ;****************************************************************************;
+                     159     ; IRQ SERVICE ROUTINE:  Timer #0                                             ;
+                     160     ; Remarks:              to be defined...                                     ;
+MCS-51 MACRO ASSEMBLER    TERM                                                                      27.Dezemb  PAGE    4
+
+
+LOC  OBJ            LINE     SOURCE
+
+                     161     ;****************************************************************************;
+----                 162                     RSEG    PRGM_IRQ_TIMER0
+0000 C2AF            163     IRQ_TIMER0:     clr     ea                      ; block all interrupts
+0002 C28C            164                     clr     TR0                     ; stop timer
+0004 C28D            165                     clr     TF0                     ; clear timer elapsed flag
+0006 C0E0            166                     push    ACC                     ; stack accu
+0008 C0D0            167                     push    PSW                     ; stack register bank
+                     168     
+                     169                     ; do something here
+                     170     
+000A D0D0            171                     pop     PSW                     ; restore register bank data
+000C D0E0            172                     pop     ACC                     ; restore accu
+000E D2AF            173                     setb    ea                      ; enable all interrupts
+0010 32              174                     RETI
+                     175     
+                     176     
+                     177     ;****************************************************************************;
+                     178     ; IRQ SERVICE ROUTINE:  Timer #1                                             ;
+                     179     ; Remarks:              to be defined...                                     ;
+                     180     ;****************************************************************************;
+----                 181                     RSEG    PRGM_IRQ_TIMER1
+0000 C2AF            182     IRQ_TIMER1:     clr     ea                      ; block all interrupts
+0002 C28E            183                     clr     TR1                     ; stop timer
+0004 C28F            184                     clr     TF1                     ; clear timer elapsed flag
+0006 C0E0            185                     push    ACC                     ; stack accu
+0008 C0D0            186                     push    PSW                     ; stack register bank
+                     187     
+                     188                     ; do something here
+                     189     
+000A D0D0            190                     pop     PSW                     ; restore register bank data
+000C D0E0            191                     pop     ACC                     ; restore accu
+000E D2AF            192                     setb    ea                      ; enable all interrupts
+0010 32              193                     RETI
+                     194     
+                     195     
+                     196     ;****************************************************************************;
+                     197     ; IRQ SERVICE ROUTINE:  Serial Interface (UART)                              ;
+                     198     ; Remarks:              to be defined...                                     ;
+                     199     ;****************************************************************************;
+----                 200                     RSEG    PRGM_IRQ_SINT
+0000 C2AF            201     IRQ_SINT:       clr     ea                      ; block all interrupts
+0002 C0E0            202                     push    ACC                     ; stack accu
+0004 C0D0            203                     push    PSW                     ; stack register bank
+                     204     
+                     205                     ; check whether frame was received or should be sent
+0006 209939          206                     jb      TI, TX_CHAR
+0009 209803          207                     jb      RI, RX_CHAR  
+000C 020000   F      208                     jmp     EXIT_IRQ_SINT           ; abort in any other case
+                     209     
+                     210 +1  RX_CHAR:        
+000F C0E0            211 +1                   push   ACC                     ; stack accu
+0011 7401            212 +2                   mov    A, #1
+0013 540B            213 +1                   anl    A, #00000011            ; mask significant bits
+0015 C2D4            214 +1                   clr    RS1                     ; clear register bank control bits
+0017 C2D3            215 +1                   clr    RS0                     ;
+MCS-51 MACRO ASSEMBLER    TERM                                                                      27.Dezemb  PAGE    5
+
+
+LOC  OBJ            LINE     SOURCE
+
+0019 23              216 +1                   rl     A                       ; shift bank bits at position in PSW
+001A 23              217 +1                   rl     A                       ;
+001B 23              218 +1                   rl     A
+001C 42D0            219 +1                   orl    PSW, A                  ; set bits in PSW according accu
+001E D0E0            220 +1                   pop    ACC                     ; restore accu
+                     221 +1                                       ; bank 1 used for indirect addressing
+0020 740C            222                     mov     A, #CHAR_CR-1           ; CR is the smallest allowed character
+0022 C3              223                     clr     C                       ; clear carry bit
+0023 9599            224                     subb    A, SBUF                 ; if SBUF > A -> carry = 1
+0025 503D            225                     jnc     EXIT_IRQ_SINT           ; character to small -> ignore it
+0027 E599            226                     mov     A, SBUF                 ; restore received byte
+0029 F6              227                     mov     @R0, A                  ; read receive byte into memory
+002A C299            228                     clr     TI                      ; echo
+002C F599            229                     mov     SBUF, A                 ; echo
+002E 3099FD          230                     jnb     TI, $                   ; echo
+0031 08              231                     inc     R0                      ; set pointer to next byte
+0032 09              232                     inc     R1                      ; update buffer fill level
+0033 D200            233                     setb    RX_PROGRES              ; frame in progres
+0035 B40D02          234                     cjne    A, #CHAR_CR, CHECK_BUFFER        ; user pressed enter?
+0038 C200            235                     clr     RX_PROGRES                       ; yes -> end of frame
+003A B90A27          236     CHECK_BUFFER:   cjne    R1, #MAX_RX_BYTES, EXIT_IRQ_SINT ; buffer full? 
+003D C200            237                     clr     RX_PROGRES                       ; yes -> force end of frame
+003F 020000   F      238                     jmp     EXIT_IRQ_SINT
+                     239     
+                     240 +1  TX_CHAR:        
+0042 C0E0            241 +1                   push   ACC                     ; stack accu
+0044 7401            242 +2                   mov    A, #1
+0046 540B            243 +1                   anl    A, #00000011            ; mask significant bits
+0048 C2D4            244 +1                   clr    RS1                     ; clear register bank control bits
+004A C2D3            245 +1                   clr    RS0                     ;
+004C 23              246 +1                   rl     A                       ; shift bank bits at position in PSW
+004D 23              247 +1                   rl     A                       ;
+004E 23              248 +1                   rl     A
+004F 42D0            249 +1                   orl    PSW, A                  ; set bits in PSW according accu
+0051 D0E0            250 +1                   pop    ACC                     ; restore accu
+                     251 +1                                       ; bank 1 used for indirect addressing
+0053 D201            252                     setb    TX_PROGRES              ; frame in process
+0055 C299            253                     clr     TI                      ; 
+0057 8699            254                     mov     SBUF, @R0               ; transmitt current byte
+0059 3099FD          255                     jnb     TI, $                   ; wait for character to be sent
+005C 08              256                     inc     R0                      ; set pointer to next byte
+005D D9E3            257                     djnz    R1, TX_CHAR             ; send entire buffer
+005F C201            258                     clr     TX_PROGRES              ; sending finished
+0061 020000   F      259                     jmp     EXIT_IRQ_SINT
+                     260     
+0064 C298            261     EXIT_IRQ_SINT:  clr     RI                      ; reset receive indicator
+0066 C299            262                     clr     TI                      ; reset transmitt indicator
+0068 D0D0            263                     pop     PSW                     ; restore register bank data
+006A D0E0            264                     pop     ACC                     ; restore accu
+006C D2AF            265                     setb    ea                      ; enable all interrupts
+006E 32              266                     RETI
+                     267     
+                     268     
+                     269     ;****************************************************************************;
+                     270     ; SUB PROGRAM:  BLINKCYC                                                     ;
+MCS-51 MACRO ASSEMBLER    TERM                                                                      27.Dezemb  PAGE    6
+
+
+LOC  OBJ            LINE     SOURCE
+
+                     271     ; Remarks:      to be defined...                                             ;
+                     272     ;****************************************************************************;
+----                 273                     RSEG PRGM_CALC
+0000 C0E0            274     CALC:           push    ACC                     ; stack accu
+0002 C0D0            275                     push    PSW                     ; stack register bank
+                     276     
+0004 7802            277                     mov     R0, #2                 ; 1s blink intervall
+                     278 +1  WAIT_BLINK:     
+0006 C28C            279 +1                  clr     TR0
+0008 C28D            280 +1                  clr     TF0
+000A 758C3C          281 +2                  mov     TH0,  #HIGH(-50000)
+000D 758AB0          282 +2                  mov     TL0,  #LOW (-50000)
+0010 D28C            283 +1                  setb    TR0
+                     284 +1                 
+0012 308DFD          285                     jnb     TF0, $
+0015 D8EF            286                     djnz    R0, WAIT_BLINK
+0017 C28C            287                     clr     TR0                     ; stop timer
+                     288     
+0019 D0D0            289                     pop     PSW                     ; restore register bank data
+001B D0E0            290                     pop     ACC                     ; restore accu
+001D 22              291                     RET
+                     292     
+                     293     
+                     294     ;****************************************************************************;
+                     295     ; MAIN PROGRAM                                                               ;
+                     296     ; Remarks:      let port 1.0 and 1.1 blink in 1s intervall                   ;
+                     297     ;****************************************************************************;
+----                 298                     RSEG    PRGM_MAIN
+0000 C2AF            299     MAIN:           clr     EA                      ; block all interrupts
+0002 758100   F      300                     mov     SP, #?Stack-1           ; reset stack pointer
+                     301     
+                     302     ; reset variables
+0005 C200            303                     clr     RX_PROGRES
+0007 C201            304                     clr     TX_PROGRES
+                     305     
+                     306     ; initialize Timer #0
+0009 5389F0          307                     anl     TMOD, #11110000b        ; Timer; TR controlled
+000C 438901          308                     orl     TMOD, #00000001b        ; Mode 1 -> 16Bit-Timer
+000F 5388CE          309                     anl     TCON, #11001110b        ; stop timer and clear TF
+0012 438801          310                     orl     TCON, #00000001b        ; /INT0 is edge sensitiv
+0015 C2A9            311                     clr     ET0                     ; disable IRQ -> handled in prgm
+                     312     
+                     313     ; initialize Timer #1
+0017 53890F          314                     anl     TMOD, #00001111b        ; Timer; TR controlled
+001A 438910          315                     orl     TMOD, #00010000b        ; Mode 1 -> 16Bit-Timer
+001D 53883E          316                     anl     TCON, #00111110b        ; stop timer and clear TF
+0020 438801          317                     orl     TCON, #00000001b        ; /INT0 is edge sensitiv
+0023 C2AB            318                     clr     ET1                     ; no IRQ -> handled in prgm
+                     319     
+                     320     ; initialize serial interface: 19200 Baud / 1 Start bit / 8 Data / 1 Stop bit / no parity
+0025 C298            321                     clr     RI                      ; clear RX interrupt flag
+0027 C299            322                     clr     TI                      ; clear TX interrupt flag
+0029 C29C            323                     clr     REN                     ; not yet ready for receiving
+002B C2AC            324                     clr     ES                      ; block serial interrupt
+002D C29F            325                     clr     SM0                     ; Mode 1 -> 8bit UART
+MCS-51 MACRO ASSEMBLER    TERM                                                                      27.Dezemb  PAGE    7
+
+
+LOC  OBJ            LINE     SOURCE
+
+002F D29E            326                     setb    SM1                     ; Mode 1 -> 8bit UART
+0031 53C800          327                     anl     T2CON, #00000000b       ; reset timer 2 configuration
+0034 D2CD            328                     setb    RCLK                    ; timer 2 used as baudrate generator
+0036 D2CC            329                     setb    TCLK                    ;
+0038 75CBFF          330                     mov     RCAP2H, #HIGH(65518)    ; Baudrate = 19200 (FFh)
+003B 75CAEE          331                     mov     RCAP2L, #LOW(65518)     ; Baudrate = 19200 (EEh)
+                     332                                                     ; do not set TL2 and TH2!
+003E D2CA            333                     setb    TR2                     ; start baudrate generator
+                     334     
+0040 7828            335                     mov     R0, #40                 ; wait 2s to activate UART
+                     336 +1  WAIT_SINT:      
+0042 C28C            337 +1                  clr     TR0
+0044 C28D            338 +1                  clr     TF0
+0046 758C3C          339 +2                  mov     TH0,  #HIGH(-50000)
+0049 758AB0          340 +2                  mov     TL0,  #LOW (-50000)
+004C D28C            341 +1                  setb    TR0
+                     342 +1                 
+004E 308DFD          343                     jnb     TF0, $
+0051 D8EF            344                     djnz    R0, WAIT_SINT
+                     345     
+                     346     
+                     347     ; *** cyclic main program ***
+                     348 +1  CYCLIC:         
+0053 C0E0            349 +1                   push   ACC                     ; stack accu
+0055 7400            350 +2                   mov    A, #0
+0057 540B            351 +1                   anl    A, #00000011            ; mask significant bits
+0059 C2D4            352 +1                   clr    RS1                     ; clear register bank control bits
+005B C2D3            353 +1                   clr    RS0                     ;
+005D 23              354 +1                   rl     A                       ; shift bank bits at position in PSW
+005E 23              355 +1                   rl     A                       ;
+005F 23              356 +1                   rl     A
+0060 42D0            357 +1                   orl    PSW, A                  ; set bits in PSW according accu
+0062 D0E0            358 +1                   pop    ACC                     ; restore accu
+                     359 +1                  
+0064 D2AF            360                     setb    EA                      ; enable all interrupts
+                     361 +1                  
+0066 C2AC            362 +1                  clr     ES
+0068 C299            363 +1                  clr     TI                      
+006A 854899          364 +2                  mov     SBUF, 'H'
+006D 3099FD          365 +1                  jnb     TI, $                   
+0070 D2AC            366 +1                  setb     ES
+                     367 +1                 
+                     368 +1                  
+0072 C2AC            369 +1                  clr     ES
+0074 C299            370 +1                  clr     TI                      
+0076 856199          371 +2                  mov     SBUF, 'a'
+0079 3099FD          372 +1                  jnb     TI, $                   
+007C D2AC            373 +1                  setb     ES
+                     374 +1                 
+                     375 +1                  
+007E C2AC            376 +1                  clr     ES
+0080 C299            377 +1                  clr     TI                      
+0082 856C99          378 +2                  mov     SBUF, 'l'
+0085 3099FD          379 +1                  jnb     TI, $                   
+0088 D2AC            380 +1                  setb     ES
+MCS-51 MACRO ASSEMBLER    TERM                                                                      27.Dezemb  PAGE    8
+
+
+LOC  OBJ            LINE     SOURCE
+
+                     381 +1                 
+                     382 +1                  
+008A C2AC            383 +1                  clr     ES
+008C C299            384 +1                  clr     TI                      
+008E 856C99          385 +2                  mov     SBUF, 'l'
+0091 3099FD          386 +1                  jnb     TI, $                   
+0094 D2AC            387 +1                  setb     ES
+                     388 +1                 
+                     389 +1                  
+0096 C2AC            390 +1                  clr     ES
+0098 C299            391 +1                  clr     TI                      
+009A 856F99          392 +2                  mov     SBUF, 'o'
+009D 3099FD          393 +1                  jnb     TI, $                   
+00A0 D2AC            394 +1                  setb     ES
+                     395 +1                 
+                     396 +1                  
+00A2 C2AC            397 +1                  clr     ES
+00A4 C299            398 +1                  clr     TI                      
+00A6 852099          399 +2                  mov     SBUF, ' '
+00A9 3099FD          400 +1                  jnb     TI, $                   
+00AC D2AC            401 +1                  setb     ES
+                     402 +1                 
+                     403 +1                  
+00AE C2AC            404 +1                  clr     ES
+00B0 C299            405 +1                  clr     TI                      
+00B2 855799          406 +2                  mov     SBUF, 'W'
+00B5 3099FD          407 +1                  jnb     TI, $                   
+00B8 D2AC            408 +1                  setb     ES
+                     409 +1                 
+                     410 +1                  
+00BA C2AC            411 +1                  clr     ES
+00BC C299            412 +1                  clr     TI                      
+00BE 856599          413 +2                  mov     SBUF, 'e'
+00C1 3099FD          414 +1                  jnb     TI, $                   
+00C4 D2AC            415 +1                  setb     ES
+                     416 +1                 
+                     417 +1                  
+00C6 C2AC            418 +1                  clr     ES
+00C8 C299            419 +1                  clr     TI                      
+00CA 857299          420 +2                  mov     SBUF, 'r'
+00CD 3099FD          421 +1                  jnb     TI, $                   
+00D0 D2AC            422 +1                  setb     ES
+                     423 +1                 
+                     424 +1                  
+00D2 C2AC            425 +1                  clr     ES
+00D4 C299            426 +1                  clr     TI                      
+00D6 856E99          427 +2                  mov     SBUF, 'n'
+00D9 3099FD          428 +1                  jnb     TI, $                   
+00DC D2AC            429 +1                  setb     ES
+                     430 +1                 
+                     431 +1                  
+00DE C2AC            432 +1                  clr     ES
+00E0 C299            433 +1                  clr     TI                      
+00E2 856599          434 +2                  mov     SBUF, 'e'
+00E5 3099FD          435 +1                  jnb     TI, $                   
+MCS-51 MACRO ASSEMBLER    TERM                                                                      27.Dezemb  PAGE    9
+
+
+LOC  OBJ            LINE     SOURCE
+
+00E8 D2AC            436 +1                  setb     ES
+                     437 +1                 
+                     438 +1                  
+00EA C2AC            439 +1                  clr     ES
+00EC C299            440 +1                  clr     TI                      
+00EE 857299          441 +2                  mov     SBUF, 'r'
+00F1 3099FD          442 +1                  jnb     TI, $                   
+00F4 D2AC            443 +1                  setb     ES
+                     444 +1                 
+                     445 +1                  
+00F6 C2AC            446 +1                  clr     ES
+00F8 C299            447 +1                  clr     TI                      
+00FA 75990D          448 +2                  mov     SBUF, #CHAR_CR
+00FD 3099FD          449 +1                  jnb     TI, $                   
+0100 D2AC            450 +1                  setb     ES
+                     451 +1                 
+                     452     
+                     453 +1  INIT_RX:        
+0102 C0E0            454 +1                   push   ACC                     ; stack accu
+0104 7401            455 +2                   mov    A, #1
+0106 540B            456 +1                   anl    A, #00000011            ; mask significant bits
+0108 C2D4            457 +1                   clr    RS1                     ; clear register bank control bits
+010A C2D3            458 +1                   clr    RS0                     ;
+010C 23              459 +1                   rl     A                       ; shift bank bits at position in PSW
+010D 23              460 +1                   rl     A                       ;
+010E 23              461 +1                   rl     A
+010F 42D0            462 +1                   orl    PSW, A                  ; set bits in PSW according accu
+0111 D0E0            463 +1                   pop    ACC                     ; restore accu
+                     464 +1                  
+0113 7800     F      465                     mov     R0, #RX_BUFFER          ; pointer to start of rx buffer
+0115 7900            466                     mov     R1, #0                  ; start copying at index 0
+0117 D29C            467                     setb    REN                     ; enable receiving
+0119 D2AC            468                     setb    ES                      ; enable serial interrupt
+011B 3000FD          469                     jnb     RX_PROGRES, $           ; wait for first received byte
+011E B290            470                     cpl     REL_CO1                 ; DEBUGGING
+0120 2000FD          471                     jb      RX_PROGRES, $           ; wait for enter (CR) to close frame
+0123 B291            472                     cpl     REL_CO2                 ; DEBUGGING
+                     473                     
+                     474                     ;call    CALC                    ; calculate result
+                     475     
+                     476 +1                  
+0125 C0E0            477 +1                   push   ACC                     ; stack accu
+0127 7401            478 +2                   mov    A, #1
+0129 540B            479 +1                   anl    A, #00000011            ; mask significant bits
+012B C2D4            480 +1                   clr    RS1                     ; clear register bank control bits
+012D C2D3            481 +1                   clr    RS0                     ;
+012F 23              482 +1                   rl     A                       ; shift bank bits at position in PSW
+0130 23              483 +1                   rl     A                       ;
+0131 23              484 +1                   rl     A
+0132 42D0            485 +1                   orl    PSW, A                  ; set bits in PSW according accu
+0134 D0E0            486 +1                   pop    ACC                     ; restore accu
+                     487 +1                  
+0136 7800     F      488                     mov     R0, #RX_BUFFER          ; pointer to start of rx buffer
+0138 D299            489     TX_FRAME:       setb    TI                      ; trigger sending
+                     490     
+MCS-51 MACRO ASSEMBLER    TERM                                                                      27.Dezemb  PAGE   10
+
+
+LOC  OBJ            LINE     SOURCE
+
+013A 80C6            491                     jmp     INIT_RX                 ; ready for next frame
+                     492     
+013C 020000   F      493     CYCLIC_END:     jmp     CYCLIC                  ; close cycle
+                     494                     END                             ; eof
+MCS-51 MACRO ASSEMBLER    TERM                                                                      27.Dezemb  PAGE   11
+
+
+XREF SYMBOL TABLE LISTING
+---- ------ ----- -------
+
+
+N A M E          T Y P E   V A L U E       ATTRIBUTES AND REFERENCES
+
+?STACK. . . . .  I SEG     0014H           REL=UNIT  35# 49 300
+ACC . . . . . .  D ADDR    00E0H   A         147 153 166 172 185 191 202 211 220 241 250 264 274 290 349 358 454 463 
+                                             477 486
+C_T2. . . . . .  B ADDR    00C8H.1 A         84#
+CALC. . . . . .  C ADDR    0000H   R       SEG=PRGM_CALC  274#
+CHAR_CR . . . .    NUMB    000DH   A         102# 222 234 448
+CHECK_BUFFER. .  C ADDR    003AH   R       SEG=PRGM_IRQ_SINT  234 236#
+CP_RL2. . . . .  B ADDR    00C8H.0 A         85#
+CYCLIC_END. . .  C ADDR    013CH   R       SEG=PRGM_MAIN  493#
+CYCLIC. . . . .  C ADDR    0053H   R       SEG=PRGM_MAIN  348# 493
+EA. . . . . . .  B ADDR    00A8H.7 A         146 154 163 173 182 192 201 265 299 360
+ES. . . . . . .  B ADDR    00A8H.4 A         324 362 366 369 373 376 380 383 387 390 394 397 401 404 408 411 415 418 
+                                             422 425 429 432 436 439 443 446 450 468
+ET0 . . . . . .  B ADDR    00A8H.1 A         311
+ET1 . . . . . .  B ADDR    00A8H.3 A         318
+ET2 . . . . . .  B ADDR    00A8H.5 A         90#
+EXEN2 . . . . .  B ADDR    00C8H.3 A         82#
+EXF2. . . . . .  B ADDR    00C8H.6 A         79#
+EXIT_IRQ_SINT .  C ADDR    0064H   R       SEG=PRGM_IRQ_SINT  208 225 236 238 259 261#
+EXTI0 . . . . .  C ADDR    0003H   A         63
+INIT_RX . . . .  C ADDR    0102H   R       SEG=PRGM_MAIN  453# 491
+IRQ_EXTI0 . . .  C ADDR    0000H   R       SEG=PRGM_IRQ_EXTI0  64 146#
+IRQ_SINT. . . .  C ADDR    0000H   R       SEG=PRGM_IRQ_SINT  73 201#
+IRQ_TIMER0. . .  C ADDR    0000H   R       SEG=PRGM_IRQ_TIMER0  67 163#
+IRQ_TIMER1. . .  C ADDR    0000H   R       SEG=PRGM_IRQ_TIMER1  70 182#
+MAIN. . . . . .  C ADDR    0000H   R       SEG=PRGM_MAIN  61 299#
+MAX_RX_BYTES. .    NUMB    000AH   A         103# 236
+P1. . . . . . .  D ADDR    0090H   A         96 97 98 99
+PRGM_CALC . . .  C SEG     001EH           REL=UNIT  40# 273
+PRGM_IRQ_EXTI0.  C SEG     000DH           REL=UNIT  42# 145
+PRGM_IRQ_SINT .  C SEG     006FH           REL=UNIT  45# 200
+PRGM_IRQ_TIMER0  C SEG     0011H           REL=UNIT  43# 162
+PRGM_IRQ_TIMER1  C SEG     0011H           REL=UNIT  44# 181
+PRGM_MAIN . . .  C SEG     013FH           REL=UNIT  39# 298
+PSW . . . . . .  D ADDR    00D0H   A         148 152 167 171 186 190 203 219 249 263 275 289 357 462 485
+RCAP2H. . . . .  D ADDR    00CBH   A         87# 330
+RCAP2L. . . . .  D ADDR    00CAH   A         86# 331
+RCLK. . . . . .  B ADDR    00C8H.5 A         80# 328
+REL_CO1 . . . .  B ADDR    0090H.0 A         96# 470
+REL_CO2 . . . .  B ADDR    0090H.1 A         97# 472
+REL_CO3 . . . .  B ADDR    0090H.2 A         98#
+REL_CO4 . . . .  B ADDR    0090H.3 A         99#
+REN . . . . . .  B ADDR    0098H.4 A         323 467
+RESET . . . . .  C ADDR    0000H   A         60
+RI. . . . . . .  B ADDR    0098H.0 A         207 261 321
+RS0 . . . . . .  B ADDR    00D0H.3 A         215 245 353 458 481
+RS1 . . . . . .  B ADDR    00D0H.4 A         214 244 352 457 480
+RX_BUFFER . . .  I SEG     0040H           REL=UNIT  36# 52 465 488
+RX_CHAR . . . .  C ADDR    000FH   R       SEG=PRGM_IRQ_SINT  207 210#
+RX_PROGRES. . .  B ADDR    0020H.0 A         94# 233 235 237 303 469 471
+SBUF. . . . . .  D ADDR    0099H   A         224 226 229 254 364 371 378 385 392 399 406 413 420 427 434 441 448
+MCS-51 MACRO ASSEMBLER    TERM                                                                      27.Dezemb  PAGE   12
+
+
+N A M E          T Y P E   V A L U E       ATTRIBUTES AND REFERENCES
+
+SINT. . . . . .  C ADDR    0023H   A         72
+SM0 . . . . . .  B ADDR    0098H.7 A         325
+SM1 . . . . . .  B ADDR    0098H.6 A         326
+SP. . . . . . .  D ADDR    0081H   A         300
+T2CON . . . . .  D ADDR    00C8H   A         77# 327
+TCLK. . . . . .  B ADDR    00C8H.4 A         81# 329
+TCON. . . . . .  D ADDR    0088H   A         309 310 316 317
+TERM. . . . . .    ----    ----              2
+TF0 . . . . . .  B ADDR    0088H.5 A         165 280 285 338 343
+TF1 . . . . . .  B ADDR    0088H.7 A         184
+TF2 . . . . . .  B ADDR    00C8H.7 A         78#
+TH0 . . . . . .  D ADDR    008CH   A         281 339
+TH2 . . . . . .  D ADDR    00CDH   A         88#
+TI. . . . . . .  B ADDR    0098H.1 A         206 228 230 253 255 262 322 363 365 370 372 377 379 384 386 391 393 398 
+                                             400 405 407 412 414 419 421 426 428 433 435 440 442 447 449 489
+TIMER0. . . . .  C ADDR    000BH   A         66
+TIMER1. . . . .  C ADDR    001BH   A         69
+TL0 . . . . . .  D ADDR    008AH   A         282 340
+TL2 . . . . . .  D ADDR    00CCH   A         89#
+TMOD. . . . . .  D ADDR    0089H   A         307 308 314 315
+TR0 . . . . . .  B ADDR    0088H.4 A         164 279 283 287 337 341
+TR1 . . . . . .  B ADDR    0088H.6 A         183
+TR2 . . . . . .  B ADDR    00C8H.2 A         83# 333
+TX_CHAR . . . .  C ADDR    0042H   R       SEG=PRGM_IRQ_SINT  206 240# 257
+TX_FRAME. . . .  C ADDR    0138H   R       SEG=PRGM_MAIN  489#
+TX_PROGRES. . .  B ADDR    0020H.1 A         95# 252 258 304
+VAR_BIT . . . .  B SEG     0014H           REL=UNIT  37# 55
+WAIT_BLINK. . .  C ADDR    0006H   R       SEG=PRGM_CALC  278# 286
+WAIT_SINT . . .  C ADDR    0042H   R       SEG=PRGM_MAIN  336# 344
+
+
+REGISTER BANK(S) USED: 0 1 2 3
+
+ASSEMBLY COMPLETE, NO ERRORS FOUND

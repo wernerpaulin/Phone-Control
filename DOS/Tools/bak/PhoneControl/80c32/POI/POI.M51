@@ -1,0 +1,343 @@
+ RL51                                                                 PAGE   1
+
+
+DATE : 11/22/98
+DOS 7.10 (038-N) MCS-51 RELOCATOR AND LINKER V3.1, INVOKED BY:
+RL51.EXE POI.OBJ
+
+
+INPUT MODULES INCLUDED
+  POI.OBJ(POI)
+
+
+LINK MAP FOR POI(POI)
+
+
+            TYPE    BASE      LENGTH    RELOCATION   SEGMENT NAME
+            ----    ----      ------    ----------   ------------
+
+            REG     0000H     0008H                  "REG BANK 0"
+            REG     0008H     0008H                  "REG BANK 1"
+            REG     0010H     0008H                  "REG BANK 2"
+            REG     0018H     0008H                  "REG BANK 3"
+            BIT     0020H     0002H.4   UNIT         FLAGS
+                    0022H.4   0000H.4                *** GAP ***
+            IDATA   0023H     0004H     UNIT         PIN
+            IDATA   0027H     0032H     UNIT         ?STACK
+
+            CODE    0000H     0003H     ABSOLUTE     
+            CODE    0003H     0003H     ABSOLUTE     
+                    0006H     0005H                  *** GAP ***
+            CODE    000BH     0003H     ABSOLUTE     
+                    000EH     000DH                  *** GAP ***
+            CODE    001BH     0003H     ABSOLUTE     
+                    001EH     0005H                  *** GAP ***
+            CODE    0023H     0003H     ABSOLUTE     
+            CODE    0026H     0142H     UNIT         USC_SERV
+            CODE    0168H     011EH     UNIT         PINMNGR
+            CODE    0286H     00FEH     UNIT         RINGMNGR
+            CODE    0384H     00FAH     UNIT         RXD_HS
+            CODE    047EH     00CCH     UNIT         INTSERV
+            CODE    054AH     00C8H     UNIT         TXD_HS
+            CODE    0612H     00B4H     UNIT         HAUPTPRG
+            CODE    06C6H     0046H     UNIT         READ_BUF
+            CODE    070CH     0042H     UNIT         EIN_TRIG
+            CODE    074EH     0042H     UNIT         AUS_TRIG
+            CODE    0790H     0026H     UNIT         TX_PIN
+            CODE    07B6H     0011H     UNIT         EXIT_SEQ
+
+
+SYMBOL TABLE FOR POI(POI)
+
+VALUE          TYPE           NAME
+-----          ----           ----
+
+-------        MODULE         POI
+I:0027H        SEGMENT        ?STACK
+D:00E0H        SYMBOL         ACC
+N:0006H        SYMBOL         ACK
+C:03F6H        SYMBOL         ALSO_T1R
+C:05CEH        SYMBOL         ALSO_T1T
+ RL51                                                                 PAGE   2
+
+
+C:074EH        SYMBOL         AUS_TON
+C:074EH        SEGMENT        AUS_TRIG
+D:00F0H        SYMBOL         B
+B:00C8H.1      SYMBOL         C_T2
+C:0564H        SYMBOL         CALC_CS
+C:0438H        SYMBOL         CO_KO_RX
+C:0608H        SYMBOL         CO_KO_TX
+C:0445H        SYMBOL         CO_OK_RX
+C:0603H        SYMBOL         CO_OK_TX
+C:03B6H        SYMBOL         COKORX
+C:0582H        SYMBOL         COKOTX
+C:07ABH        SYMBOL         COPY_PIN
+B:00C8H        SYMBOL         CP_RL2
+B:0021H        SYMBOL         CS_Q_REC
+N:0002H        SYMBOL         DEF_PUN
+C:0468H        SYMBOL         DELY_T1R
+N:FC00H        SYMBOL         DTMF_DEC
+B:0021H.2      SYMBOL         DTMF_FL
+C:048EH        SYMBOL         DTMF_INT
+B:00A8H.7      SYMBOL         EA
+C:070CH        SYMBOL         EIN_TON
+C:070CH        SEGMENT        EIN_TRIG
+C:01CDH        SYMBOL         EMC_CHK
+B:0021H.5      SYMBOL         EMC_ON
+N:0001H        SYMBOL         EMC1DIG
+N:0002H        SYMBOL         EMC2DIG
+N:0001H        SYMBOL         EMC3DIG
+N:0002H        SYMBOL         EMC4DIG
+C:040AH        SYMBOL         ERGO_T1R
+C:05E2H        SYMBOL         ERGO_T1T
+B:00A8H.4      SYMBOL         ES
+B:00A8H.1      SYMBOL         ET0
+B:00A8H.3      SYMBOL         ET1
+B:00A8H.5      SYMBOL         ET2
+C:03A4H        SYMBOL         EV_RX_T1
+C:0574H        SYMBOL         EV_TX_T1
+B:00A8H        SYMBOL         EX0
+B:00C8H.3      SYMBOL         EXEN2
+B:00C8H.6      SYMBOL         EXF2
+C:052BH        SYMBOL         EXIT_RXD
+C:07B6H        SEGMENT        EXIT_SEQ
+C:0164H        SYMBOL         EXITSERV
+C:0003H        SYMBOL         EXTI0
+N:0011H        SYMBOL         FADE_OUT
+C:0778H        SYMBOL         FADING_A
+C:0736H        SYMBOL         FADING_E
+B:0021H.7      SYMBOL         FLAG16
+B:0022H        SYMBOL         FLAG17
+B:0022H.1      SYMBOL         FLAG18
+B:0022H.2      SYMBOL         FLAG19
+B:0022H.3      SYMBOL         FLAG20
+B:0020H        SEGMENT        FLAGS
+C:0585H        SYMBOL         FRM_SEND
+C:01ACH        SYMBOL         FULL_PIN
+C:0424H        SYMBOL         GO2RETRY
+C:0701H        SYMBOL         HANG_UP
+C:0612H        SEGMENT        HAUPTPRG
+ RL51                                                                 PAGE   3
+
+
+N:000CH        SYMBOL         HESCH
+B:0090H.6      SYMBOL         HOOK
+N:00A0H        SYMBOL         ID_PIN_A
+N:00D0H        SYMBOL         ID_PIN_D
+N:00A1H        SYMBOL         ID_PUN_A
+N:00D1H        SYMBOL         ID_PUN_D
+N:00A2H        SYMBOL         ID_STS_A
+N:00D2H        SYMBOL         ID_STS_D
+B:0088H.1      SYMBOL         IE0
+C:0612H        SYMBOL         INIT
+C:047EH        SEGMENT        INTSERV
+C:0282H        SYMBOL         INV_PIN
+C:0482H        SYMBOL         IS_BEG
+C:047EH        SYMBOL         IS_DTMF
+C:053FH        SYMBOL         IS_END
+C:00F5H        SYMBOL         K_1
+C:010BH        SYMBOL         K_2
+C:0121H        SYMBOL         K_3
+C:0137H        SYMBOL         K_4
+C:014DH        SYMBOL         K_5
+C:007BH        SYMBOL         KE_HESCH
+N:00C8H        SYMBOL         KEY_TO
+C:07B6H        SYMBOL         LOGOUT
+B:0090H.5      SYMBOL         MF_AUS
+B:0090H.4      SYMBOL         MF_EIN
+N:0015H        SYMBOL         NACK
+C:005BH        SYMBOL         NEW_KEY
+C:019DH        SYMBOL         NEW_PIN
+C:007EH        SYMBOL         NEW_SKEY
+B:0021H.1      SYMBOL         NEWUSER
+C:01A7H        SYMBOL         NO_PIN
+C:0421H        SYMBOL         NO_RX_CS
+C:00BFH        SYMBOL         NO_SUSP
+C:0056H        SYMBOL         NORM_TO
+N:000AH        SYMBOL         NULL
+C:00A9H        SYMBOL         OFF_CYCL
+N:00C8H        SYMBOL         OFF_DEL
+C:0380H        SYMBOL         OFF_LINE
+N:00C8H        SYMBOL         ON_DEL
+C:0362H        SYMBOL         ON_LINE
+N:000AH        SYMBOL         OWN_ADR
+D:0090H        SYMBOL         P1
+C:06F2H        SYMBOL         PIN_QUIT
+N:00C8H        SYMBOL         PIN_TO
+I:0023H        SEGMENT        PIN
+C:0790H        SYMBOL         PIN2BUF
+C:0285H        SYMBOL         PINC_END
+C:0168H        SYMBOL         PINCHECK
+C:0168H        SEGMENT        PINMNGR
+B:0021H.3      SYMBOL         PINQ_REC
+C:069BH        SYMBOL         PORTINIT
+N:0000H        SYMBOL         POS0_ADR
+B:0020H.2      SYMBOL         POSRESET
+C:02E9H        SYMBOL         PR_EXEC04
+C:0229H        SYMBOL         PR_EXEC17
+C:04F2H        SYMBOL         PR_EXEC2A
+D:00D0H        SYMBOL         PSW
+ RL51                                                                 PAGE   4
+
+
+B:0020H.1      SYMBOL         QA_STS_A
+C:04B3H        SYMBOL         QA
+D:00CBH        SYMBOL         RCAP2H
+D:00CAH        SYMBOL         RCAP2L
+B:00C8H.5      SYMBOL         RCLK
+C:04AAH        SYMBOL         RD_PROC
+N:0064H        SYMBOL         REACT_TO
+C:06C6H        SEGMENT        READ_BUF
+C:0707H        SYMBOL         READ_END
+C:0400H        SYMBOL         REC_FRM
+C:05F6H        SYMBOL         REC_RETCO
+C:040CH        SYMBOL         RECEIVE
+B:0090H        SYMBOL         REL_CO1
+B:0090H.1      SYMBOL         REL_CO2
+B:0090H.2      SYMBOL         REL_CO3
+B:0090H.3      SYMBOL         REL_CO4
+C:02FFH        SYMBOL         RELCO0E
+C:0105H        SYMBOL         RELCO1_A
+C:011BH        SYMBOL         RELCO2_A
+C:023FH        SYMBOL         RELCO21
+C:0131H        SYMBOL         RELCO3_A
+C:0508H        SYMBOL         RELCO34
+C:0147H        SYMBOL         RELCO4_A
+B:0098H.4      SYMBOL         REN
+N:0014H        SYMBOL         REPLY_TO
+C:0000H        SYMBOL         RESET
+C:0332H        SYMBOL         RESETTIM
+N:0020H        SYMBOL         RETCO
+C:042BH        SYMBOL         RETRY_CO
+N:0003H        SYMBOL         RETRY_INI
+B:0098H        SYMBOL         RI
+C:0383H        SYMBOL         RING_END
+B:0090H.7      SYMBOL         RING
+C:0286H        SYMBOL         RINGING
+C:0286H        SEGMENT        RINGMNGR
+N:0078H        SYMBOL         RPU_TIME
+C:034BH        SYMBOL         RPU_TO
+B:00D0H.3      SYMBOL         RS0
+B:00D0H.4      SYMBOL         RS1
+N:0005H        SYMBOL         RTR
+C:0591H        SYMBOL         RTRCS_TO
+C:0340H        SYMBOL         RUFTON
+B:0020H.6      SYMBOL         RUN_XD_T0
+B:0020H.7      SYMBOL         RUN_XD_T1
+C:0417H        SYMBOL         RX_CHKSM
+B:0020H        SYMBOL         RX_CO_ER
+C:03B9H        SYMBOL         RX_READY
+C:0479H        SYMBOL         RXD_END
+C:0384H        SYMBOL         RXD_FRAME
+C:03E6H        SYMBOL         RXD_FRM
+C:0384H        SEGMENT        RXD_HS
+C:04A1H        SYMBOL         RXD_INT
+C:03A7H        SYMBOL         RXD_OK
+C:02EBH        SYMBOL         SAFE_CO06
+C:022BH        SYMBOL         SAFE_CO19
+C:04F4H        SYMBOL         SAFE_CO2C
+B:0020H.3      SYMBOL         SAFECO
+ RL51                                                                 PAGE   5
+
+
+D:0099H        SYMBOL         SBUF
+C:02F3H        SYMBOL         SCO_EXEC08
+C:0233H        SYMBOL         SCO_EXEC1B
+C:04FCH        SYMBOL         SCO_EXEC2E
+C:00E7H        SYMBOL         SCO
+C:05E4H        SYMBOL         SEND
+C:0026H        SYMBOL         SERVICE
+C:0023H        SYMBOL         SINT
+C:008DH        SYMBOL         SK_1
+C:0096H        SYMBOL         SK_2
+C:00A0H        SYMBOL         SK_3
+C:00E4H        SYMBOL         SK_DONE
+N:00C8H        SYMBOL         SKEY_TO
+B:0098H.7      SYMBOL         SM0
+B:0098H.6      SYMBOL         SM1
+D:0081H        SYMBOL         SP
+C:015EH        SYMBOL         SRU_A
+C:02FDH        SYMBOL         SRU_EXEC0C
+C:023DH        SYMBOL         SRU_EXEC1F
+C:0506H        SYMBOL         SRU_EXEC32
+B:0020H.4      SYMBOL         SRU
+C:02F5H        SYMBOL         SRU?0A
+C:0235H        SYMBOL         SRU?1D
+C:04FEH        SYMBOL         SRU?30
+C:049BH        SYMBOL         ST_RXD
+C:052EH        SYMBOL         ST_TXD
+C:003AH        SYMBOL         STAND_BY
+C:06E8H        SYMBOL         STATUS
+C:02DBH        SYMBOL         STATUS02
+C:021BH        SYMBOL         STATUS15
+C:04E4H        SYMBOL         STATUS28
+N:000BH        SYMBOL         STERN
+B:0021H.4      SYMBOL         SVC_ON
+N:0001H        SYMBOL         SVC1DIG
+N:0002H        SYMBOL         SVC2DIG
+N:0002H        SYMBOL         SVC3DIG
+N:0002H        SYMBOL         SVC4DIG
+D:00C8H        SYMBOL         T2CON
+C:03D1H        SYMBOL         TAKE_T1R
+C:05A9H        SYMBOL         TAKE_T1T
+B:00C8H.4      SYMBOL         TCLK
+D:0088H        SYMBOL         TCON
+C:0539H        SYMBOL         TD_PROC
+B:0088H.5      SYMBOL         TF0
+B:0088H.7      SYMBOL         TF1
+B:00C8H.7      SYMBOL         TF2
+D:008CH        SYMBOL         TH0
+D:008DH        SYMBOL         TH1
+D:00CDH        SYMBOL         TH2
+B:0098H.1      SYMBOL         TI
+C:000BH        SYMBOL         TIMER0
+C:001BH        SYMBOL         TIMER1
+D:008AH        SYMBOL         TL0
+D:008BH        SYMBOL         TL1
+D:00CCH        SYMBOL         TL2
+D:0089H        SYMBOL         TMOD
+B:0088H.4      SYMBOL         TR0
+ RL51                                                                 PAGE   6
+
+
+B:0088H.6      SYMBOL         TR1
+B:00C8H.2      SYMBOL         TR2
+C:05D8H        SYMBOL         TRA_FRM
+C:05EEH        SYMBOL         TX_CHKSM
+B:0020H.5      SYMBOL         TX_CO_ER
+C:0790H        SEGMENT        TX_PIN
+C:060DH        SYMBOL         TXD_END
+C:054AH        SYMBOL         TXD_FRAME
+C:05BEH        SYMBOL         TXD_FRM
+C:054AH        SEGMENT        TXD_HS
+C:0534H        SYMBOL         TXD_INT
+C:0577H        SYMBOL         TXD_OK
+C:0600H        SYMBOL         TXDFRAME
+C:01EAH        SYMBOL         USC_CHK
+B:0021H.6      SYMBOL         USC_ON
+C:0026H        SEGMENT        USC_SERV
+C:02CDH        SYMBOL         USER_ADR00
+C:020DH        SYMBOL         USER_ADR13
+C:04D6H        SYMBOL         USER_ADR26
+C:030FH        SYMBOL         USERDATA10
+C:024FH        SYMBOL         USERDATA23
+C:0518H        SYMBOL         USERDATA36
+C:027DH        SYMBOL         VAL_PIN
+C:0278H        SYMBOL         VAL_PINQ
+C:00A7H        SYMBOL         W4CUTOFF
+C:0261H        SYMBOL         W4PINREP
+C:00CAH        SYMBOL         W4POWER
+C:0063H        SYMBOL         W4SKEY
+C:06B2H        SYMBOL         WAIT4JOB
+C:003CH        SYMBOL         WAIT4KEY
+C:0186H        SYMBOL         WAIT4PIN
+C:0321H        SYMBOL         WAIT4PUN
+C:0368H        SYMBOL         WAIT4REA
+C:0357H        SYMBOL         WAIT4RUF
+C:06C6H        SYMBOL         WP2_READ
+C:0317H        SYMBOL         WRITEEND12
+C:0257H        SYMBOL         WRITEEND25
+C:0520H        SYMBOL         WRITEEND38
+-------        ENDMOD         POI
+

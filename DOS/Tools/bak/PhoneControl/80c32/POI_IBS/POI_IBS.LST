@@ -1,0 +1,507 @@
+MCS-51 MACRO ASSEMBLER    IBS-SW f^r das POI                                                        17. Augus  PAGE    1
+
+
+DOS 7.10 (038-N) MCS-51 MACRO ASSEMBLER, V2.3
+OBJECT MODULE PLACED IN POI_IBS.OBJ
+ASSEMBLER INVOKED BY:  ASM51.EXE POI_IBS.SRC
+                       
+
+LOC  OBJ            LINE     SOURCE
+
+                       1     $DEBUG RB(0) XREF EP TITLE(IBS-SW f^r das POI) DATE(17. August 1997)
+                       2     ;
+                       3     NAME POI_IBS
+                       4     ;****************************************************************************;
+                       5     ;   Copyright:  1997  WePa - Entwicklungsabteilung                           ;
+                       6     ;****************************************************************************;
+                       7     ;   Kennzeichnung:                                                           ;
+                       8     ;       ID-Nr.       030209019677                                            ;
+                       9     ;       System       Phone-Control                                           ;
+                      10     ;       Sub-System   Phone-Control Operating Interface -POI                  ;
+                      11     ;       Funktion     Inbetriebsetzungs-Software f?r das POI                  ;
+                      12     ;       Filename     POI_IBS.src                                             ;
+                      13     ;****************************************************************************;
+                      14     ;   History                                                                  ;
+                      15     ;   Version     Datum       Autor             Bemerkung                      ;
+                      16     ;   01.00       17.08.97    Paulin Werner     Rumpfversion                   ;
+                      17     ;****************************************************************************;
+                      18     ; Beschreibung :                                                             ;
+                      19     ;               Nach zweimaligen L"uten hebt das POI ab und schickt dabei    ;
+                      20     ;               ?ber die serielle Schnittstelle die ASCII-Zeichen "PICK UP"  ;
+                      21     ;               Die sbertragung erfolgt mit 2400 Baud in Betriebsmodus 1     ;
+                      22     ;               d.h.: 1 Startbit | 8 Datenbits | 1 Stopbit                   ;
+                      23     ;               Druch das Starten von POIMON.bat erh"lt man einen richtig    ;
+                      24     ;               konfigurierten Monitor.                                      ;   
+                      25     ;               Zur IBS der Relais schickt man die DTMF-kodierten Zahlen 1-4.;
+                      26     ;               Sie ist erfolgreich, wenn die vier gelben LED's in der       ;
+                      27     ;               richtigen Reihenfolge aufleuchten.                           ;   
+                      28     ;               dazu ert"nt beim Einschalten ein hoher Ton (3KHz) und beim   ;
+                      29     ;               Auschalten ein tiefer Ton (ca. 500Hz)                        ;
+                      30     ;               Bei andauernden DTMF-Ton blinkt die entsprechende LED.       ;
+                      31     ;****************************************************************************;
+                      32     ;
+                      33     ;SEGMENT - NAMEN:
+                      34     ;
+                      35     ?STACK                  SEGMENT IDATA
+                      36     INTSERV                 SEGMENT CODE
+                      37     HAUPTPRG                SEGMENT CODE
+                      38     FLAGS                   SEGMENT BIT
+                      39     ;
+----                  40                     RSEG    ?STACK                  ;Stackreservierung
+0000                  41                     DS      20
+                      42     ;
+----                  43                     CSEG    AT      RESET   
+0000 020000   F       44                     LJMP    INIT
+                      45     ;
+----                  46                     CSEG    AT      TIMER0           ;Interrupt-Einsprungadr.
+000B 020000   F       47                     LJMP    INTSERV1
+                      48     ;
+----                  49                     CSEG    AT      TIMER1           ;Interrupt-Einsprungadr.
+001B 020000   F       50                     LJMP    INTSERV1
+MCS-51 MACRO ASSEMBLER    IBS-SW f^r das POI                                                        17. Augus  PAGE    2
+
+
+LOC  OBJ            LINE     SOURCE
+
+                      51     ;                
+----                  52                     CSEG    AT      EXTI0            ;Interrupt-Einsprungadr.
+0003 020000   F       53                     LJMP    INTSERV1
+                      54     ;
+----                  55                     RSEG    FLAGS
+0000                  56                     DBIT    8
+                      57     ;
+                      58     ;Symboldefinitionen:
+                      59     ;
+  0000                60     FLAG1           BIT     0
+  0001                61     FLAG2           BIT     1
+  0002                62     FLAG3           BIT     2
+  0003                63     FLAG4           BIT     3
+  0004                64     FLAG5           BIT     4
+  0005                65     FLAG6           BIT     5
+  0006                66     FLAG7           BIT     6
+  0007                67     FLAG8           BIT     7
+                      68     ;
+                      69     ;Port-Pin-Vergabe:
+                      70     ;                 P1.7: Eingang f?r L"utsignal
+                      71     ;                 P1.6: Ausgang zum Abheben
+                      72     ;                 P1.5: Triggerung MFAUS
+                      73     ;                 P1.4: Triggerung MFEIN
+                      74     ;                 P1.3: Aktivierung durch Taste "4"
+                      75     ;                 P1.2: Aktivierung durch Taste "3"
+                      76     ;                 P1.1: Aktivierung durch Taste "2"
+                      77     ;                 P1.0: Aktivierung durch Taste "1"
+                      78     ;
+                      79     ;Ext. Interrupt-Vergabe:
+                      80     ;                       INT0: DTMF-codierte Taste liegt an Ausgangspins an
+                      81     ;
+                      82     ;Register-Verwendung:
+                      83     ;                    R1: 12.5s, f?r Warten auf Reaktion nach abheben
+                      84     ;                    R2: 6s, um ein Abheben einer anderen Anlage zu erkennen
+                      85     ;                    R3: speichert die decodierte Tastennummer
+                      86     ;                    R4: 400ms, f?r "Software-Tastenentprellung"
+                      87     ;                    R5: 10s, f?r Warten auf erneuten Tastendruck
+                      88     ;
+                      89     ;FLAG-Vergabe:
+                      90     ;             FLAG1: Interruptroutinen-Verzweigung
+                      91     ;             FLAG2: DTMF-Ton-Verarbeitung aktiviert
+                      92     ;             FLAG3: EIN-Bit, damit PC EIN/AUS unterscheiden kann
+                      93     ;             FLAG4: AUS-Bit, damit PC EIN/AUS unterscheiden kann
+                      94     ;
+                      95     ;PROGRAMME:
+                      96     ;
+----                  97                     RSEG HAUPTPRG                           ;Hauptprogramm
+                      98     ;
+0000 758100   F       99     INIT:           mov     SP, #?Stack-1
+0003 E590            100     START:          mov     a, P1
+0005 44C0            101                     orl     a, #11000000b
+0007 F590            102                     mov     P1, a
+0009 7802            103                     mov     r0,#2                           ;7 mal l"uten
+000B C28C            104                     clr     tr0                             ;Timer 0 stoppen
+000D C28E            105                     clr     tr1                             ;Timer 1 stoppen
+MCS-51 MACRO ASSEMBLER    IBS-SW f^r das POI                                                        17. Augus  PAGE    3
+
+
+LOC  OBJ            LINE     SOURCE
+
+000F C200            106                     clr     FLAG1                           ;Unterscheidung: Intserv
+0011 C201            107                     clr     FLAG2                           ;DTMF-Ton aufgenommen
+0013 C202            108                     clr     FLAG3                           ;EIN-Bit
+0015 C203            109                     clr     FLAG4                           ;AUS-Bit
+0017 C204            110                     clr     FLAG5
+0019 C205            111                     clr     FLAG6
+001B C206            112                     clr     FLAG7
+001D C207            113                     clr     FLAG8
+                     114     
+                     115     ;******************** Test der seriellen Schnitstelle ************************
+001F 758700          116                     mov     87H, #0
+0022 C298            117                     clr     ri
+0024 C28E            118                     clr     tr1
+0026 C28F            119                     clr     tf1
+0028 53890F          120                     anl     tmod, #00001111b
+002B 438920          121                     orl     tmod, #00100000b
+002E 5388CF          122                     anl     tcon, #11001111b
+0031 438805          123                     orl     tcon, #00000101b
+0034 758DF4          124                     mov     th1, #(0F4H)
+0037 758BF4          125                     mov     tl1, #(0F4H)
+003A D28E            126                     setb    tr1
+003C D29C            127                     setb    REN
+003E C29F            128                     clr     SM0
+0040 D29E            129                     setb    SM1
+0042 C2A8            130                     clr     ex0
+0044 759950          131                     mov     sbuf, #'P'                       
+0047 3099FD          132                     jnb     ti,$                                                               
+                                     
+004A C299            133                     clr     ti
+                     134     
+                     135     
+004C 309702          136     ABFRAGE1:       jnb     p1.7, BEGINN                    ;warten auf L"utsignal
+004F 80FB            137                     jmp     ABFRAGE1
+0051 7A78            138     BEGINN:         mov     r2,#120                         ;6s Abfrage  
+0053 C2AF            139                     clr     ea
+0055 C28C            140                     clr     tr0                             
+0057 5389F0          141                     anl     tmod, #11110000b                ;Timer 0, Mode 1  
+005A 438901          142                     orl     tmod, #00000001b                 
+005D 5388CC          143                     anl     tcon, #11001100b
+0060 438800          144                     orl     tcon, #0
+0063 758A18          145                     mov     tl0, #low(-65000)               ;mit 65ms laden
+0066 758C02          146                     mov     th0, #high(-65000)
+0069 D2AF            147                     setb    ea
+006B D2A9            148                     setb    et0                             ;Timer0 - Int. freigeben
+006D D28C            149                     setb    tr0                             ;Timer0 starten
+006F C2AF            150     SCHLEIFE:       clr     ea
+0071 C28E            151                     clr     tr1
+0073 C28F            152                     clr     tf1
+0075 53890F          153                     anl     tmod, #00001111b                ;Timer 1, Mode 1
+0078 438910          154                     orl     tmod, #00010000b
+007B 538833          155                     anl     tcon, #00110011b
+007E 438800          156                     orl     tcon, #0
+0081 758BB0          157                     mov     tl1, #low(-50000)               ;mit 50ms laden
+0084 758D3C          158                     mov     th1, #high(-50000)
+0087 D2AF            159                     setb    ea
+MCS-51 MACRO ASSEMBLER    IBS-SW f^r das POI                                                        17. Augus  PAGE    4
+
+
+LOC  OBJ            LINE     SOURCE
+
+0089 C2AB            160                     clr     et1                             ;T1-Int. sperren
+008B D2A9            161                     setb    et0
+008D D28E            162                     setb    tr1                             ;Timer 1 starten
+008F 3097BF          163     ABFRAGE2:       jnb     p1.7, BEGINN                    ;Schleife um ein fremdes
+0092 309608          164                     jnb     p1.6, WEITER                    ;Abheben zu erkennen
+0095 308FF7          165                     jnb     tf1, ABFRAGE2                   ;innerhalb von 6 Sek. 
+0098 DAD5            166                     djnz    r2, SCHLEIFE                    ;mu  es erneuet L"uten
+009A 020000   F      167                     jmp     START                           ;sonst Neustart d. Prgm.
+                     168     ;
+009D D200            169     WEITER:         setb    FLAG1                           ;Kontrolle 12.5s lang:
+009F C28E            170                     clr     tr1                             ;erfolgt keine Reaktion,
+00A1 79FA            171                     mov     r1, #250                        ;wird wieder aufgelegt
+00A3 C2AF            172     SCHLEIFE2:      clr     ea                              
+00A5 C28C            173                     clr     tr0                             
+00A7 C28D            174                     clr     tf0
+00A9 758AB0          175                     mov     tl0, #low(-50000)
+00AC 758C3C          176                     mov     th0, #high(-50000)
+00AF D2AF            177                     setb    ea
+00B1 C2AB            178                     clr     et1                             ;sperrt T1-Interrupt
+00B3 C2A9            179                     clr     et0                             ;sperrt T0-Interrupt
+00B5 D288            180                     setb    it0                             ;INT0 -> auf Flanke
+00B7 D2A8            181                     setb    ex0                             ;INT0 freigeben
+00B9 D28C            182                     setb    tr0                             ;T0 starten
+00BB D288            183     ABFRAGE3:       setb    IT0
+00BD 200110          184                     jb      FLAG2, DTMFSERI
+00C0 308DF8          185                     jnb     tf0, ABFRAGE3                   ;die Reaktion erfolgt
+00C3 20010A          186                     jb      FLAG2, DTMFSERI
+00C6 D9DB            187                     djnz    r1, SCHLEIFE2                   ;durch INT0-Ausl"sung
+00C8 200105          188                     jb      FLAG2, DTMFSERI
+00CB D296            189                     setb    p1.6                            ;aufgelegen, wenn r1=0
+00CD 020000   F      190                     jmp     START
+                     191     ;
+00D0 D288            192     DTMFSERI:       setb    IT0
+00D2 C201            193                     clr     FLAG2
+00D4 C2AF            194                     clr     ea
+00D6 C28C            195                     clr     tr0
+00D8 C28E            196                     clr     tr1
+00DA 200206          197                     jb      FLAG3, MFEIN
+00DD 200308          198                     jb      FLAG4, MFAUS
+00E0 020000   F      199                     jmp     SERIPC                          ;Tasten nur f?r PC best.
+00E3 C294            200     MFEIN:          clr     P1.4                            ;Monoflop-EIN-Triggerung
+00E5 020000   F      201                     jmp     MFZEIT
+00E8 C295            202     MFAUS:          clr     P1.5                            ;Monoflop-AUS-Triggerung
+00EA C28E            203     MFZEIT:         clr     tr1
+00EC C28F            204                     clr     tf1
+00EE 53890F          205                     anl     tmod, #00001111b                ;Timer 1, Mode 1
+00F1 438910          206                     orl     tmod, #00010000b
+00F4 538833          207                     anl     tcon, #00110011b
+00F7 438800          208                     orl     tcon, #0
+00FA 758BB0          209                     mov     tl1, #low(-50000)               ;mit 50ms laden
+00FD 758D3C          210                     mov     th1, #high(-50000)
+0100 D28E            211                     setb    tr1                             ;Timer 1 starten
+0102 308FFD          212     MFZEITAB:       jnb     tf1, MFZEITAB
+0105 C28E            213                     clr     tr1
+0107 D294            214                     setb    P1.4
+MCS-51 MACRO ASSEMBLER    IBS-SW f^r das POI                                                        17. Augus  PAGE    5
+
+
+LOC  OBJ            LINE     SOURCE
+
+0109 D295            215                     setb    P1.5
+                     216     ;
+                     217     ;
+010B C2AF            218     SERIPC:         clr     ea                              ;serielle sbertragung
+010D 758700          219                     mov     87H, #0                         ;FLAGS 3,4 f. Info an PC
+0110 C299            220                     clr     ti
+0112 53890F          221                     anl     tmod, #00001111b
+0115 438920          222                     orl     tmod, #00100000b
+0118 5388CC          223                     anl     tcon, #11001100b
+011B 438800          224                     orl     tcon, #0
+011E 758DF4          225                     mov     th1, #(0F4H)
+0121 758BF4          226                     mov     tl1, #(0F4H)
+0124 D28E            227                     setb    tr1
+0126 EB              228                     mov     a, r3
+0127 F599            229                     mov     sbuf, a                         
+0129 3099FD          230                     jnb     ti, $
+012C C299            231                     clr     ti
+012E C2AF            232                     clr     ea                               
+0130 C28C            233                     clr     tr0
+0132 C28D            234                     clr     tf0
+0134 5389F0          235                     anl     tmod, #11110000b                ;Timer 0, Mode 1  
+0137 438901          236                     orl     tmod, #00000001b                 
+013A 5388CC          237                     anl     tcon, #11001100b
+013D 438800          238                     orl     tcon, #0
+0140 758A18          239                     mov     tl0, #low(-65000)               ;mit 65ms laden
+0143 758C02          240                     mov     th0, #high(-65000)
+0146 D28C            241                     setb    tr0                             ;Timer0 starten
+0148 308DFD          242                     jnb     tf0,$
+014B 200203          243                     jb      FLAG3, SERI_EIN
+014E 200309          244                     jb      FLAG4, SERI_AUS
+0151 759945          245     SERI_EIN:       mov     sbuf, #'E'
+0154 3099FD          246                     jnb     ti, $
+0157 020000   F      247                     jmp     SERIENDE
+015A 759941          248     SERI_AUS:       mov     sbuf, #'A'
+015D 3099FD          249                     jnb     ti, $
+0160 C202            250     SERIENDE:       clr     FLAG3
+0162 C203            251                     clr     FLAG4
+0164 7DC8            252                     mov     r5, #200
+0166 C28E            253                     clr     tr1
+0168 C2AF            254     TASTE:          clr     ea
+016A C28E            255                     clr     tr1
+016C C28F            256                     clr     tf1
+016E 53890F          257                     anl     tmod, #00001111b                ;Timer 1, Mode 1
+0171 438910          258                     orl     tmod, #00010000b
+0174 538833          259                     anl     tcon, #00110011b
+0177 438800          260                     orl     tcon, #0
+017A 758BB0          261                     mov     tl1, #low(-50000)               ;mit 50ms laden
+017D 758D3C          262                     mov     th1, #high(-50000)
+0180 D2AF            263                     setb    ea
+0182 C2AB            264                     clr     et1                             ;T1-Int. sperren
+0184 D2A8            265                     setb    ex0
+0186 D28E            266                     setb    tr1                             ;Timer 1 starten
+0188 200108          267     TASTEABF:       jb      FLAG2, ZUDTMF                 
+018B 308FFA          268                     jnb     tf1, TASTEABF                   ;warten auf erneuten
+018E DDD8            269                     djnz    r5, TASTE                       ;Tastendruck
+MCS-51 MACRO ASSEMBLER    IBS-SW f^r das POI                                                        17. Augus  PAGE    6
+
+
+LOC  OBJ            LINE     SOURCE
+
+0190 020000   F      270                     jmp     START                           ;sonst Neustart d. Prgm.
+0193 020000   F      271     ZUDTMF:         jmp     DTMFSERI
+                     272     ;
+----                 273                     RSEG    INTSERV                         ;Interruptserviceroutine
+                     274     ;
+0000 C2AF            275     INTSERV1:       clr     ea                              ;sperrt alle Interrupts
+0002 200066          276                     jb      FLAG1, INTSERV2                 ;Routinenverzweigung
+0005 C28C            277                     clr     tr0
+0007 D85F            278                     djnz    r0, NACHENDE                        ;1x l"uten abgeschlossen
+0009 C296            279                     clr     p1.6                            ;hebt ab
+                     280     ;******************** Test der seriellen Schnitstelle ************************
+000B 758700          281                     mov     87H, #0
+000E C298            282                     clr     ri
+0010 C28E            283                     clr     tr1
+0012 C28F            284                     clr     tf1
+0014 53890F          285                     anl     tmod, #00001111b
+0017 438920          286                     orl     tmod, #00100000b
+001A 5388CF          287                     anl     tcon, #11001111b
+001D 438805          288                     orl     tcon, #00000101b
+0020 758DF4          289                     mov     th1, #(0F4H)
+0023 758BF4          290                     mov     tl1, #(0F4H)
+0026 D28E            291                     setb    tr1
+0028 D29C            292                     setb    REN
+002A C29F            293                     clr     SM0
+002C D29E            294                     setb    SM1
+002E C2A8            295                     clr     ex0
+0030 759950          296                     mov     sbuf, #'P'                       
+0033 3099FD          297                     jnb     ti,$                                                               
+                                     
+0036 C299            298                     clr     ti
+0038 759949          299                     mov     sbuf, #'I'                       
+003B 3099FD          300                     jnb     ti,$                                                               
+                                     
+003E C299            301                     clr     ti
+0040 759943          302                     mov     sbuf, #'C'                       
+0043 3099FD          303                     jnb     ti,$                                                               
+                                     
+0046 C299            304                     clr     ti
+0048 75994B          305                     mov     sbuf, #'K'                       
+004B 3099FD          306                     jnb     ti,$                                                               
+                                     
+004E C299            307                     clr     ti
+0050 759920          308                     mov     sbuf, #' '                       
+0053 3099FD          309                     jnb     ti,$                                                               
+                                     
+0056 C299            310                     clr     ti
+0058 759955          311                     mov     sbuf, #'U'                       
+005B 3099FD          312                     jnb     ti,$                                                               
+                                     
+005E C299            313                     clr     ti
+0060 759950          314                     mov     sbuf, #'P'                       
+0063 3099FD          315                     jnb     ti,$                                                               
+                                     
+0066 C299            316                     clr     ti
+0068 020000   F      317     NACHENDE:       jmp     ENDE
+MCS-51 MACRO ASSEMBLER    IBS-SW f^r das POI                                                        17. Augus  PAGE    7
+
+
+LOC  OBJ            LINE     SOURCE
+
+006B C2AF            318     INTSERV2:       clr     ea
+006D C28C            319                     clr     tr0
+006F C28E            320                     clr     tr1
+0071 90FC00          321                     mov     dptr, #0fc00h                   ;/CS1 gew"hlt
+0074 E0              322                     movx    a, @dptr                        ;Daten in den Akku laden
+0075 540F            323                     anl     a, #00001111b
+0077 FB              324                     mov     r3, a
+0078 D201            325                     setb    FLAG2
+007A B4010A          326                     cjne    a, #1, ZWEI                     ;Decodierung der Tasten
+007D B290            327                     cpl     P1.0                            ;Taste "1" kompl. P1.0
+007F 309037          328                     jnb     P1.0, EIN
+0082 D203            329                     setb    FLAG4
+0084 020000   F      330                     jmp     ENDEDTMF
+0087 B4020A          331     ZWEI:           cjne    a, #2, DREI
+008A B291            332                     cpl     P1.1                            ;Taste "2" kompl. P1.1
+008C 30912A          333                     jnb     P1.1, EIN
+008F D203            334                     setb    FLAG4
+0091 020000   F      335                     jmp     ENDEDTMF
+0094 B4030A          336     DREI:           cjne    a, #3, VIER
+0097 B292            337                     cpl     P1.2                            ;Taste "3" kompl. P1.2
+0099 30921D          338                     jnb     P1.2, EIN
+009C D203            339                     setb    FLAG4
+009E 020000   F      340                     jmp     ENDEDTMF
+00A1 B4040A          341     VIER:           cjne    a, #4, SICHERAB
+00A4 B293            342                     cpl     P1.3                            ;Taste "4" kompl. P1.3
+00A6 309310          343                     jnb     P1.3, EIN
+00A9 D203            344                     setb    FLAG4
+00AB 020000   F      345                     jmp     ENDEDTMF
+00AE B40B0A          346     SICHERAB:       cjne    a, #00001011b, ENDEDTMF         ;* - TASTE
+00B1 43903F          347                     orl     P1, #00111111b                  ;Sicherheitsabschaltung
+00B4 D203            348                     setb    FLAG4
+00B6 020000   F      349                     jmp     ENDEDTMF
+00B9 D202            350     EIN:            setb    FLAG3
+00BB 7C08            351     ENDEDTMF:       mov     r4, #8                          ;"Software-Entprellung"
+00BD C28E            352     ENTPREL1:       clr     tr1
+00BF C28F            353                     clr     tf1
+00C1 53890F          354                     anl     tmod, #00001111b                ;Timer 1, Mode 1
+00C4 438910          355                     orl     tmod, #00010000b
+00C7 538833          356                     anl     tcon, #00110011b
+00CA 438800          357                     orl     tcon, #0
+00CD 758BB0          358                     mov     tl1, #low(-50000)               ;mit 50ms laden
+00D0 758D3C          359                     mov     th1, #high(-50000)
+00D3 D28E            360                     setb    tr1                             ;Timer 1 starten
+00D5 308FFD          361     ENTPREL2:       jnb     tf1, ENTPREL2                    
+00D8 DCE3            362                     djnz    r4, ENTPREL1                    
+00DA C28E            363                     clr     tr1
+00DC D2AF            364     ENDE:           setb    ea
+00DE 32              365                     reti
+                     366                     END
+MCS-51 MACRO ASSEMBLER    IBS-SW f^r das POI                                                        17. Augus  PAGE    8
+
+
+XREF SYMBOL TABLE LISTING
+---- ------ ----- -------
+
+
+N A M E     T Y P E   V A L U E       ATTRIBUTES AND REFERENCES
+
+?STACK . .  I SEG     0014H           REL=UNIT  35# 40 99
+ABFRAGE1 .  C ADDR    004CH   R       SEG=HAUPTPRG  136# 137
+ABFRAGE2 .  C ADDR    008FH   R       SEG=HAUPTPRG  163# 165
+ABFRAGE3 .  C ADDR    00BBH   R       SEG=HAUPTPRG  183# 185
+BEGINN . .  C ADDR    0051H   R       SEG=HAUPTPRG  136 138# 163
+DREI . . .  C ADDR    0094H   R       SEG=INTSERV  331 336#
+DTMFSERI .  C ADDR    00D0H   R       SEG=HAUPTPRG  184 186 188 192# 271
+EA . . . .  B ADDR    00A8H.7 A         139 147 150 159 172 177 194 218 232 254 263 275 318 364
+EIN. . . .  C ADDR    00B9H   R       SEG=INTSERV  328 333 338 343 350#
+ENDE . . .  C ADDR    00DCH   R       SEG=INTSERV  317 364#
+ENDEDTMF .  C ADDR    00BBH   R       SEG=INTSERV  330 335 340 345 346 349 351#
+ENTPREL1 .  C ADDR    00BDH   R       SEG=INTSERV  352# 362
+ENTPREL2 .  C ADDR    00D5H   R       SEG=INTSERV  361# 361
+ET0. . . .  B ADDR    00A8H.1 A         148 161 179
+ET1. . . .  B ADDR    00A8H.3 A         160 178 264
+EX0. . . .  B ADDR    00A8H.0 A         130 181 265 295
+EXTI0. . .  C ADDR    0003H   A         52
+FLAG1. . .  B ADDR    0020H.0 A         60# 106 169 276
+FLAG2. . .  B ADDR    0020H.1 A         61# 107 184 186 188 193 267 325
+FLAG3. . .  B ADDR    0020H.2 A         62# 108 197 243 250 350
+FLAG4. . .  B ADDR    0020H.3 A         63# 109 198 244 251 329 334 339 344 348
+FLAG5. . .  B ADDR    0020H.4 A         64# 110
+FLAG6. . .  B ADDR    0020H.5 A         65# 111
+FLAG7. . .  B ADDR    0020H.6 A         66# 112
+FLAG8. . .  B ADDR    0020H.7 A         67# 113
+FLAGS. . .  B SEG     0008H           REL=UNIT  38# 55
+HAUPTPRG .  C SEG     0196H           REL=UNIT  37# 97
+INIT . . .  C ADDR    0000H   R       SEG=HAUPTPRG  44 99#
+INTSERV. .  C SEG     00DFH           REL=UNIT  36# 273
+INTSERV1 .  C ADDR    0000H   R       SEG=INTSERV  47 50 53 275#
+INTSERV2 .  C ADDR    006BH   R       SEG=INTSERV  276 318#
+IT0. . . .  B ADDR    0088H.0 A         180 183 192
+MFAUS. . .  C ADDR    00E8H   R       SEG=HAUPTPRG  198 202#
+MFEIN. . .  C ADDR    00E3H   R       SEG=HAUPTPRG  197 200#
+MFZEIT . .  C ADDR    00EAH   R       SEG=HAUPTPRG  201 203#
+MFZEITAB .  C ADDR    0102H   R       SEG=HAUPTPRG  212# 212
+NACHENDE .  C ADDR    0068H   R       SEG=INTSERV  278 317#
+P1 . . . .  D ADDR    0090H   A         100 102 136 163 164 189 200 202 214 215 279 327 328 332 333 337 338 342 343 347
+POI_IBS. .    ----    ----              3
+REN. . . .  B ADDR    0098H.4 A         127 292
+RESET. . .  C ADDR    0000H   A         43
+RI . . . .  B ADDR    0098H.0 A         117 282
+SBUF . . .  D ADDR    0099H   A         131 229 245 248 296 299 302 305 308 311 314
+SCHLEIFE .  C ADDR    006FH   R       SEG=HAUPTPRG  150# 166
+SCHLEIFE2.  C ADDR    00A3H   R       SEG=HAUPTPRG  172# 187
+SERI_AUS .  C ADDR    015AH   R       SEG=HAUPTPRG  244 248#
+SERI_EIN .  C ADDR    0151H   R       SEG=HAUPTPRG  243 245#
+SERIENDE .  C ADDR    0160H   R       SEG=HAUPTPRG  247 250#
+SERIPC . .  C ADDR    010BH   R       SEG=HAUPTPRG  199 218#
+SICHERAB .  C ADDR    00AEH   R       SEG=INTSERV  341 346#
+SM0. . . .  B ADDR    0098H.7 A         128 293
+MCS-51 MACRO ASSEMBLER    IBS-SW f^r das POI                                                        17. Augus  PAGE    9
+
+
+N A M E     T Y P E   V A L U E       ATTRIBUTES AND REFERENCES
+
+SM1. . . .  B ADDR    0098H.6 A         129 294
+SP . . . .  D ADDR    0081H   A         99
+START. . .  C ADDR    0003H   R       SEG=HAUPTPRG  100# 167 190 270
+TASTE. . .  C ADDR    0168H   R       SEG=HAUPTPRG  254# 269
+TASTEABF .  C ADDR    0188H   R       SEG=HAUPTPRG  267# 268
+TCON . . .  D ADDR    0088H   A         122 123 143 144 155 156 207 208 223 224 237 238 259 260 287 288 356 357
+TF0. . . .  B ADDR    0088H.5 A         174 185 234 242
+TF1. . . .  B ADDR    0088H.7 A         119 152 165 204 212 256 268 284 353 361
+TH0. . . .  D ADDR    008CH   A         146 176 240
+TH1. . . .  D ADDR    008DH   A         124 158 210 225 262 289 359
+TI . . . .  B ADDR    0098H.1 A         132 133 220 230 231 246 249 297 298 300 301 303 304 306 307 309 310 312 313 315 
+                                        316
+TIMER0 . .  C ADDR    000BH   A         46
+TIMER1 . .  C ADDR    001BH   A         49
+TL0. . . .  D ADDR    008AH   A         145 175 239
+TL1. . . .  D ADDR    008BH   A         125 157 209 226 261 290 358
+TMOD . . .  D ADDR    0089H   A         120 121 141 142 153 154 205 206 221 222 235 236 257 258 285 286 354 355
+TR0. . . .  B ADDR    0088H.4 A         104 140 149 173 182 195 233 241 277 319
+TR1. . . .  B ADDR    0088H.6 A         105 118 126 151 162 170 196 203 211 213 227 253 255 266 283 291 320 352 360 363
+VIER . . .  C ADDR    00A1H   R       SEG=INTSERV  336 341#
+WEITER . .  C ADDR    009DH   R       SEG=HAUPTPRG  164 169#
+ZUDTMF . .  C ADDR    0193H   R       SEG=HAUPTPRG  267 271#
+ZWEI . . .  C ADDR    0087H   R       SEG=INTSERV  326 331#
+
+
+REGISTER BANK(S) USED: 0
+
+ASSEMBLY COMPLETE, NO ERRORS FOUND

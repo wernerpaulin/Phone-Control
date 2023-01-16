@@ -1,0 +1,136 @@
+$DEBUG RB(0,1) XREF EP TITLE(......) DATE(Makro:DD)
+;
+NAME clock
+;
+public  getseke,getsekz,getmine,getminz,gethoue,gethouz,getdaye,getdayz,getmone,getmonz,getyeae,getyeaz,getdow,startclock
+public  setseke,setsekz,setmine,setminz,sethoue,sethouz,setdaye,setdayz,setmone,setmonz,setyeae,setyeaz,setdow,stopclock
+
+clockram        equ     0fd00h
+
+clock           segment code
+
+                rseg    clock
+
+clockmask:      movx    a,@dptr
+                anl     a,#00001111b
+                ret
+
+getseke:        mov     dptr,#clockram+2
+                call    clockmask
+                ret
+
+getsekz:        mov     dptr,#clockram+3
+                call    clockmask
+                ret
+
+getmine:        mov     dptr,#clockram+4
+                call    clockmask
+                ret
+
+getminz:        mov     dptr,#clockram+5
+                call    clockmask
+                ret
+
+gethoue:        mov     dptr,#clockram+6
+                call    clockmask
+                ret
+
+gethouz:        mov     dptr,#clockram+7
+                call    clockmask
+                ret
+
+getdaye:        mov     dptr,#clockram+8
+                call    clockmask
+                ret
+
+getdayz:        mov     dptr,#clockram+9
+                call    clockmask
+                ret
+
+getmone:        mov     dptr,#clockram+10
+                call    clockmask
+                ret
+
+getmonz:        mov     dptr,#clockram+11
+                call    clockmask
+                ret
+
+getyeae:        mov     dptr,#clockram+12
+                call    clockmask
+                ret
+
+getyeaz:        mov     dptr,#clockram+13
+                call    clockmask
+                ret
+
+getdow:         mov     dptr,#clockram+14
+                call    clockmask
+                ret
+
+setclock:       movx    @dptr,a
+                ret
+
+setseke:        mov     dptr,#clockram+2
+                call    setclock
+                ret
+
+setsekz:        mov     dptr,#clockram+3
+                call    setclock
+                ret
+
+setmine:        mov     dptr,#clockram+4
+                call    setclock
+                ret
+
+setminz:        mov     dptr,#clockram+5
+                call    setclock
+                ret
+
+sethoue:        mov     dptr,#clockram+6
+                call    setclock
+                ret
+
+sethouz:        mov     dptr,#clockram+7
+                call    setclock
+                ret
+
+setdaye:        mov     dptr,#clockram+8
+                call    setclock
+                ret
+
+setdayz:        mov     dptr,#clockram+9
+                call    setclock
+                ret
+
+setmone:        mov     dptr,#clockram+10
+                call    setclock
+                ret
+
+setmonz:        mov     dptr,#clockram+11
+                call    setclock
+                ret
+
+setyeae:        mov     dptr,#clockram+12
+                call    setclock
+                ret
+
+setyeaz:        mov     dptr,#clockram+13
+                call    setclock
+                ret
+
+setdow:         mov     dptr,#clockram+14
+                call    setclock
+                ret
+
+startclock:     mov     dptr,#clockram
+                mov     a,#1
+                call    setclock
+                ret
+
+stopclock:      mov     dptr,#clockram
+                mov     a,#5
+                call    setclock
+                ret
+
+
+                end

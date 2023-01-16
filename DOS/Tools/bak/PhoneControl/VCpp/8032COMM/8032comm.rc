@@ -1,0 +1,507 @@
+//Microsoft Developer Studio generated resource script.
+//
+#include "resource.h"
+
+#define APSTUDIO_READONLY_SYMBOLS
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 2 resource.
+//
+#include "afxres.h"
+
+/////////////////////////////////////////////////////////////////////////////
+#undef APSTUDIO_READONLY_SYMBOLS
+
+/////////////////////////////////////////////////////////////////////////////
+// German (Germany) resources
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_DEU)
+#ifdef _WIN32
+LANGUAGE LANG_GERMAN, SUBLANG_GERMAN
+#pragma code_page(1252)
+#endif //_WIN32
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Icon
+//
+
+// Icon with lowest ID value placed first to ensure application icon
+// remains consistent on all systems.
+IDR_MAINFRAME           ICON    DISCARDABLE     "res\\Phone07.ico"
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Dialog
+//
+
+IDD_DIALOG2 DIALOG DISCARDABLE  0, 0, 191, 55
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Personal device discribtion"
+FONT 8, "MS Sans Serif"
+BEGIN
+    DEFPUSHBUTTON   "OK",IDOK,30,34,50,14
+    EDITTEXT        IDC_EDIT1,7,7,59,12,ES_AUTOHSCROLL
+    EDITTEXT        IDC_EDIT2,66,7,60,12,ES_AUTOHSCROLL
+    EDITTEXT        IDC_EDIT3,125,7,59,12,ES_AUTOHSCROLL
+    PUSHBUTTON      "Cancel",IDCANCEL,112,34,50,14
+END
+
+IDD_DIALOG3 DIALOG DISCARDABLE  0, 0, 160, 50
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Save Settings"
+FONT 8, "MS Sans Serif"
+BEGIN
+    DEFPUSHBUTTON   "OK",IDOK,29,29,40,14
+    PUSHBUTTON      "Cancel",IDCANCEL,90,29,40,14
+    LTEXT           "Press the 'OK' - button to save your settings or choose the 'Cancel' - button to skip saving ...",
+                    IDC_STATIC,7,7,146,17
+END
+
+IDD_DIALOG4 DIALOG DISCARDABLE  0, 0, 120, 92
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Serial COM - port"
+FONT 8, "MS Sans Serif"
+BEGIN
+    GROUPBOX        "choose one of the possibilities",IDC_STATIC,6,7,107,61
+    CONTROL         "COM 1",IDC_RADIO1,"Button",BS_AUTORADIOBUTTON | 
+                    WS_GROUP,16,16,35,10
+    CONTROL         "COM 2",IDC_RADIO2,"Button",BS_AUTORADIOBUTTON,16,28,35,
+                    10
+    CONTROL         "COM 3",IDC_RADIO3,"Button",BS_AUTORADIOBUTTON,68,16,35,
+                    10
+    CONTROL         "COM 4",IDC_RADIO4,"Button",BS_AUTORADIOBUTTON,68,28,35,
+                    10
+    DEFPUSHBUTTON   "OK",IDOK,12,71,36,14
+    PUSHBUTTON      "Cancel",IDCANCEL,72,71,36,14
+    CTEXT           "Note: If you change COM - port - settings, you have to save settings and restart the program !",
+                    IDC_STATIC,7,41,103,25
+END
+
+IDD_DIALOG5 DIALOG DISCARDABLE  0, 0, 168, 70
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Recall factory settings"
+FONT 8, "MS Sans Serif"
+BEGIN
+    DEFPUSHBUTTON   "OK",IDOK,23,49,39,14
+    PUSHBUTTON      "Cancel",IDCANCEL,105,49,39,14
+    LTEXT           "Click the 'OK' - button to delete your settings and recall factory settings or choose the 'Cancel' - button to skip recalling ...                                Note: press the reset button after clicking the ""OK"" - button !",
+                    IDC_STATIC,7,7,154,41,SS_NOPREFIX
+END
+
+IDD_DIALOG6 DIALOG DISCARDABLE  0, 0, 114, 145
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Monitoring..."
+FONT 8, "MS Sans Serif"
+BEGIN
+    GROUPBOX        "Phoneline condition",IDC_TELLINE,7,7,100,17
+    GROUPBOX        "Safety cut off",IDC_SECURE,7,26,100,17
+    GROUPBOX        "Last received character",IDC_LASTRECCHAR,7,45,100,17
+    GROUPBOX        "Last transmitted character",IDC_LASTTRACHAR,7,64,100,17
+    DEFPUSHBUTTON   "OK",IDOK,32,124,50,14
+    GROUPBOX        "Speech recognition",IDC_SPEECHREC,7,83,100,17
+    GROUPBOX        "Speech profile identification",IDC_SPEECHPROF,7,102,100,
+                    17
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// DESIGNINFO
+//
+
+#ifdef APSTUDIO_INVOKED
+GUIDELINES DESIGNINFO DISCARDABLE 
+BEGIN
+    IDD_DIALOG2, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 184
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 48
+    END
+
+    IDD_DIALOG3, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 153
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 43
+    END
+
+    IDD_DIALOG4, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 113
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 85
+    END
+
+    IDD_DIALOG5, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 161
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 63
+    END
+
+    IDD_DIALOG6, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 107
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 138
+    END
+END
+#endif    // APSTUDIO_INVOKED
+
+#endif    // German (Germany) resources
+/////////////////////////////////////////////////////////////////////////////
+
+
+/////////////////////////////////////////////////////////////////////////////
+// English (U.S.) resources
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
+#ifdef _WIN32
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+#pragma code_page(1252)
+#endif //_WIN32
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Dialog
+//
+
+IDD_ABOUTBOX DIALOG DISCARDABLE  0, 0, 199, 42
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Info about Phone - Control"
+FONT 8, "MS Sans Serif"
+BEGIN
+    ICON            IDR_MAINFRAME,IDC_STATIC,13,15,18,20,SS_REALSIZEIMAGE
+    LTEXT           "Phone - Control /Version 1.0",IDC_STATIC,40,10,119,8,
+                    SS_NOPREFIX
+    LTEXT           "Copyright © 1996 by Paulin Werner",IDC_STATIC,40,25,119,
+                    8
+    DEFPUSHBUTTON   "OK",IDOK,160,7,32,14,WS_GROUP
+END
+
+IDD_DIALOG1 DIALOG DISCARDABLE  0, 0, 159, 50
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Pick - Up - Number"
+FONT 8, "MS Sans Serif"
+BEGIN
+    DEFPUSHBUTTON   "OK",IDOK,32,28,37,14
+    PUSHBUTTON      "Cancel",IDCANCEL,89,28,37,14
+    COMBOBOX        IDC_COMBO1,7,7,21,94,CBS_DROPDOWNLIST | WS_TABSTOP
+    LTEXT           "Please press the reset button on the hardware device, after clicking ""OK"" ",
+                    IDC_STATIC,29,7,122,18
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// DESIGNINFO
+//
+
+#ifdef APSTUDIO_INVOKED
+GUIDELINES DESIGNINFO DISCARDABLE 
+BEGIN
+    IDD_ABOUTBOX, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 192
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 35
+    END
+
+    IDD_DIALOG1, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 151
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 42
+    END
+END
+#endif    // APSTUDIO_INVOKED
+
+
+#ifdef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// TEXTINCLUDE
+//
+
+1 TEXTINCLUDE DISCARDABLE 
+BEGIN
+    "resource.h\0"
+END
+
+2 TEXTINCLUDE DISCARDABLE 
+BEGIN
+    "#include ""afxres.h""\r\n"
+    "\0"
+END
+
+3 TEXTINCLUDE DISCARDABLE 
+BEGIN
+    "#define _AFX_NO_SPLITTER_RESOURCES\r\n"
+    "#define _AFX_NO_OLE_RESOURCES\r\n"
+    "#define _AFX_NO_TRACKER_RESOURCES\r\n"
+    "#define _AFX_NO_PROPERTY_RESOURCES\r\n"
+    "\r\n"
+    "#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)\r\n"
+    "#ifdef _WIN32\r\n"
+    "LANGUAGE 9, 1\r\n"
+    "#pragma code_page(1252)\r\n"
+    "#endif\r\n"
+    "#include ""res\\8032comm.rc2""  // non-Microsoft Visual C++ edited resources\r\n"
+    "#include ""afxres.rc""         // Standard components\r\n"
+    "#endif\0"
+END
+
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Menu
+//
+
+IDR_MAINFRAME MENU PRELOAD DISCARDABLE 
+BEGIN
+    POPUP "&Quit"
+    BEGIN
+        MENUITEM "&Phone Control",              ID_APP_EXIT
+    END
+    POPUP "&Settings..."
+    BEGIN
+        MENUITEM "&Hardware",                   ID_HARDWARE_SETTINGS
+        MENUITEM "&Software",                   ID_SETTINGS_SOFTWARE
+        MENUITEM "S&erial port",                ID_SETTINGS_SERIALPORT
+        MENUITEM SEPARATOR
+        MENUITEM "S&ave settings",              ID_SETTINGS_SAVESETTINGS
+        MENUITEM "&Recall factory",             ID_SETTINGS_RECALLFACTORY
+    END
+    POPUP "S&ystem"
+    BEGIN
+        MENUITEM "&Monitor",                    ID_SYSTEM_MONITOR
+    END
+    POPUP "&Help"
+    BEGIN
+        MENUITEM "&Phone keypad",               ID_HELP_TELKEY
+        MENUITEM "&Software",                   ID_HELP_SOFTWARE
+        MENUITEM SEPARATOR
+        MENUITEM "&Info",                       ID_APP_ABOUT
+    END
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Accelerator
+//
+
+IDR_MAINFRAME ACCELERATORS PRELOAD MOVEABLE PURE 
+BEGIN
+    "A",            ID_SETTINGS_SAVESETTINGS, VIRTKEY, CONTROL, NOINVERT
+    "B",            ID_APP_EXIT,            VIRTKEY, CONTROL, NOINVERT
+    "E",            ID_SETTINGS_SERIALPORT, VIRTKEY, CONTROL, NOINVERT
+    "H",            ID_HARDWARE_SETTINGS,   VIRTKEY, CONTROL, NOINVERT
+    "M",            ID_SYSTEM_MONITOR,      VIRTKEY, CONTROL, NOINVERT
+    "R",            ID_SETTINGS_RECALLFACTORY, VIRTKEY, CONTROL, NOINVERT
+    "S",            ID_SETTINGS_SOFTWARE,   VIRTKEY, CONTROL, NOINVERT
+    "S",            ID_HELP_SOFTWARE,       VIRTKEY, CONTROL, NOINVERT
+    "T",            ID_HELP_TELKEY,         VIRTKEY, CONTROL, NOINVERT
+END
+
+
+#ifndef _MAC
+/////////////////////////////////////////////////////////////////////////////
+//
+// Version
+//
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 1,0,0,1
+ PRODUCTVERSION 1,0,0,1
+ FILEFLAGSMASK 0x3fL
+#ifdef _DEBUG
+ FILEFLAGS 0x1L
+#else
+ FILEFLAGS 0x0L
+#endif
+ FILEOS 0x4L
+ FILETYPE 0x1L
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName", "\0"
+            VALUE "FileDescription", "8032COMM MFC Application\0"
+            VALUE "FileVersion", "1, 0, 0, 1\0"
+            VALUE "InternalName", "8032COMM\0"
+            VALUE "LegalCopyright", "Copyright © 1996\0"
+            VALUE "OriginalFilename", "8032COMM.EXE\0"
+            VALUE "ProductName", "8032COMM Application\0"
+            VALUE "ProductVersion", "1, 0, 0, 1\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END
+
+#endif    // !_MAC
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Dialog Info
+//
+
+IDD_DIALOG1 DLGINIT
+BEGIN
+    IDC_COMBO1, 0x403, 2, 0
+0x0031, 
+    IDC_COMBO1, 0x403, 2, 0
+0x0032, 
+    IDC_COMBO1, 0x403, 2, 0
+0x0033, 
+    IDC_COMBO1, 0x403, 2, 0
+0x0034, 
+    IDC_COMBO1, 0x403, 2, 0
+0x0035, 
+    IDC_COMBO1, 0x403, 2, 0
+0x0036, 
+    IDC_COMBO1, 0x403, 2, 0
+0x0037, 
+    IDC_COMBO1, 0x403, 2, 0
+0x0038, 
+    IDC_COMBO1, 0x403, 2, 0
+0x0039, 
+    0
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// String Table
+//
+
+STRINGTABLE PRELOAD DISCARDABLE 
+BEGIN
+    IDR_MAINFRAME           "8032comm\n\nMy8032\n\n\nMy8032comm.Document\nMy8032 Document"
+END
+
+STRINGTABLE PRELOAD DISCARDABLE 
+BEGIN
+    AFX_IDS_APP_TITLE       "Phone - Control"
+    AFX_IDS_IDLEMESSAGE     "Use the menu to operate with the program"
+END
+
+STRINGTABLE DISCARDABLE 
+BEGIN
+    ID_APP_ABOUT            "See information about the Phone - Control"
+    ID_APP_EXIT             "Quit the Phone - Control; make sure, that you have saved all settings"
+END
+
+STRINGTABLE DISCARDABLE 
+BEGIN
+    AFX_IDS_SCSIZE          "Change the window size of the Phone - Control"
+    AFX_IDS_SCMOVE          "Change the window position of the Phone - Control"
+    AFX_IDS_SCMINIMIZE      "Reduce the Phone - Control window to an icon"
+    AFX_IDS_SCMAXIMIZE      "Enlarge the Phone - Control window to full size"
+END
+
+STRINGTABLE DISCARDABLE 
+BEGIN
+    AFX_IDS_SCRESTORE       "Restore the Phone - Control window to normal size"
+    AFX_IDS_SCTASKLIST      "Activate Task List"
+END
+
+STRINGTABLE DISCARDABLE 
+BEGIN
+    ID_HARDWARE_SETTINGS    "Open the Hardwaresetup - configuration"
+    ID_SETTINGS_SOFTWARE    "Open the Softwaresetup - configuration"
+    ID_SETTINGS_SERIALPORT  "Choose your serial port for communication"
+    ID_SYSTEM_MONITOR       "Monitor the Phone - Control application"
+    ID_SETTINGS_SAVESETTINGS "Store your settings"
+    ID_SETTINGS_RECALLFACTORY "Call back default factory settings"
+END
+
+STRINGTABLE DISCARDABLE 
+BEGIN
+    ID_VIEW_STATUS_BAR      "Show or hide the status bar\nToggle StatusBar"
+END
+
+STRINGTABLE DISCARDABLE 
+BEGIN
+    ID_INDICATOR_EXT        "EXT"
+    ID_INDICATOR_CAPS       "CAP"
+    ID_INDICATOR_NUM        "NUM"
+    ID_INDICATOR_SCRL       "SCRL"
+    ID_INDICATOR_OVR        "OVR"
+    ID_INDICATOR_REC        "REC"
+END
+
+#endif    // English (U.S.) resources
+/////////////////////////////////////////////////////////////////////////////
+
+
+/////////////////////////////////////////////////////////////////////////////
+// German (Austria) resources
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_DEA)
+#ifdef _WIN32
+LANGUAGE LANG_GERMAN, SUBLANG_GERMAN_AUSTRIAN
+#pragma code_page(1252)
+#endif //_WIN32
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Icon
+//
+
+// Icon with lowest ID value placed first to ensure application icon
+// remains consistent on all systems.
+IDI_LightOn             ICON    DISCARDABLE     "RES\\Lighton.ico"
+IDI_LightOff            ICON    DISCARDABLE     "RES\\Lightoff.ico"
+IDI_W95mbx03            ICON    DISCARDABLE     "RES\\W95mbx03.ico"
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Bitmap
+//
+
+IDB_PC1                 BITMAP  DISCARDABLE     "res\\bitmap1.bmp"
+IDB_Speech              BITMAP  DISCARDABLE     "res\\bmp00001.bmp"
+#endif    // German (Austria) resources
+/////////////////////////////////////////////////////////////////////////////
+
+
+
+#ifndef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 3 resource.
+//
+#define _AFX_NO_SPLITTER_RESOURCES
+#define _AFX_NO_OLE_RESOURCES
+#define _AFX_NO_TRACKER_RESOURCES
+#define _AFX_NO_PROPERTY_RESOURCES
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
+#ifdef _WIN32
+LANGUAGE 9, 1
+#pragma code_page(1252)
+#endif
+#include "res\8032comm.rc2"  // non-Microsoft Visual C++ edited resources
+#include "afxres.rc"         // Standard components
+#endif
+/////////////////////////////////////////////////////////////////////////////
+#endif    // not APSTUDIO_INVOKED
+
